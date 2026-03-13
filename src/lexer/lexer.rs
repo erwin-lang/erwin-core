@@ -1,6 +1,6 @@
 use std::{iter::Peekable, str::Chars};
 
-use crate::{error::Error, parser::token::Token};
+use crate::{error::Error, lexer::token::Token};
 
 pub fn tokenize(code: &str) -> Result<Vec<Token>, Error> {
     let mut chars = code.chars().peekable();
@@ -26,10 +26,7 @@ pub fn tokenize(code: &str) -> Result<Vec<Token>, Error> {
                 Some('=') => push_and_advance(&mut chars, &mut tokens, Token::Equal),
                 _ => tokens.push(Token::Assign),
             },
-            ':' => match chars.peek() {
-                Some('=') => push_and_advance(&mut chars, &mut tokens, Token::NodeAssign),
-                _ => tokens.push(Token::Colon),
-            },
+            ':' => tokens.push(Token::Colon),
             '!' => match chars.peek() {
                 Some('=') => push_and_advance(&mut chars, &mut tokens, Token::NotEqual),
                 Some('|') => push_and_advance(&mut chars, &mut tokens, Token::Nor),
@@ -103,6 +100,9 @@ fn tokenize_identifier(first_char: char, chars: &mut Peekable<Chars>) -> Result<
     }
 
     Ok(match identifier.as_str() {
+        "var" => Token::Var,
+        "node" => Token::Node,
+        "const" => Token::Const,
         "obj" => Token::Obj,
         "func" => Token::Func,
         "return" => Token::Return,
@@ -114,6 +114,23 @@ fn tokenize_identifier(first_char: char, chars: &mut Peekable<Chars>) -> Result<
         "else" => Token::Else,
         "true" => Token::True,
         "false" => Token::False,
+        "priv" => Token::Priv,
+        "pub" => Token::Pub,
+        "Bool" => Token::Bool,
+        "Int8" => Token::Int8,
+        "Int16" => Token::Int16,
+        "Int32" => Token::Int32,
+        "Int64" => Token::Int64,
+        "Int128" => Token::Int128,
+        "Uint8" => Token::Uint8,
+        "Uint16" => Token::Uint16,
+        "Uint32" => Token::Uint32,
+        "Uint64" => Token::Uint64,
+        "Uint128" => Token::Uint128,
+        "Float32" => Token::Float32,
+        "Float64" => Token::Float64,
+        "Str" => Token::String,
+        "Ptr" => Token::Pointer,
         _ => Token::Identifier(identifier),
     })
 }
@@ -150,7 +167,7 @@ fn tokenize_string(chars: &mut Peekable<Chars>) -> Result<Token, Error> {
     let mut string = String::new();
     while let Some(char) = chars.next() {
         match char {
-            '"' => return Ok(Token::String(string)),
+            '"' => return Ok(Token::StringLiteral(string)),
             '\\' => {
                 let next = chars
                     .next()
@@ -178,7 +195,7 @@ fn tokenize_raw_string(chars: &mut Peekable<Chars>) -> Result<Token, Error> {
 
     while let Some(char) = chars.next() {
         match char {
-            '"' => return Ok(Token::String(string)),
+            '"' => return Ok(Token::StringLiteral(string)),
             _ => string.push(char),
         }
     }

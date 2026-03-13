@@ -1,15 +1,11 @@
 use std::{env::args, fs::read_to_string, path::Path};
 
-use crate::{
-    error::Error,
-    parser::{lexer::tokenize, parser::parse},
-    runtime::runtime::execute,
-};
+use crate::{error::Error, lexer::lexer::tokenize, runtime::runtime::execute};
 
 mod error;
+mod lexer;
 mod parser;
 mod runtime;
-mod types;
 
 fn main() -> Result<(), Error> {
     let args = args().collect::<Vec<String>>();
