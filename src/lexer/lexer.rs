@@ -1,204 +1,285 @@
-use std::{iter::Peekable, str::Chars};
+use crate::{
+    error::Error,
+    lexer::Lexer,
+    syntax::token::{Token, TokenKind},
+};
 
-use crate::{error::Error, lexer::token::Token};
-
-pub fn tokenize(code: &str) -> Result<Vec<Token>, Error> {
-    let mut chars = code.chars().peekable();
-    let mut tokens = Vec::new();
-
-    while let Some(char) = chars.next() {
-        match char {
-            // Whitespace and newline
-            ' ' | '\n' | '\t' | '\r' => {}
-
-            // Identifier and keywords
-            'a'..='z' | 'A'..='Z' | '_' => tokens.push(tokenize_identifier(char, &mut chars)?),
-
-            // Number
-            '0'..='9' => tokens.push(tokenize_number(char, &mut chars)?),
-
-            // Strings
-            '"' => tokens.push(tokenize_string(&mut chars)?),
-            '@' => tokens.push(tokenize_raw_string(&mut chars)?),
-
-            // Symbols
-            '=' => match chars.peek() {
-                Some('=') => push_and_advance(&mut chars, &mut tokens, Token::Equal),
-                _ => tokens.push(Token::Assign),
-            },
-            ':' => tokens.push(Token::Colon),
-            '!' => match chars.peek() {
-                Some('=') => push_and_advance(&mut chars, &mut tokens, Token::NotEqual),
-                Some('|') => push_and_advance(&mut chars, &mut tokens, Token::Nor),
-                Some('&') => push_and_advance(&mut chars, &mut tokens, Token::Nand),
-                Some('^') => push_and_advance(&mut chars, &mut tokens, Token::Xnor),
-                _ => tokens.push(Token::Not),
-            },
-            '<' => match chars.peek() {
-                Some('=') => push_and_advance(&mut chars, &mut tokens, Token::LessEqual),
-                Some('|') => push_and_advance(&mut chars, &mut tokens, Token::LPipe),
-                Some('-') => push_and_advance(&mut chars, &mut tokens, Token::LArrow),
-                _ => tokens.push(Token::LessThan),
-            },
-            '>' => match chars.peek() {
-                Some('=') => push_and_advance(&mut chars, &mut tokens, Token::GreaterEqual),
-                _ => tokens.push(Token::GreaterThan),
-            },
-            '|' => match chars.peek() {
-                Some('|') => push_and_advance(&mut chars, &mut tokens, Token::Or),
-                Some('>') => push_and_advance(&mut chars, &mut tokens, Token::RPipe),
-                _ => return Err(Error::Custom(format!("Unexpected token: {}", char))),
-            },
-            '&' => match chars.peek() {
-                Some('&') => push_and_advance(&mut chars, &mut tokens, Token::And),
-                _ => return Err(Error::Custom(format!("Unexpected token: {}", char))),
-            },
-            '^' => match chars.peek() {
-                Some('^') => push_and_advance(&mut chars, &mut tokens, Token::Xor),
-                _ => tokens.push(Token::Pow),
-            },
-            '(' => tokens.push(Token::LParen),
-            ')' => tokens.push(Token::RParen),
-            '[' => tokens.push(Token::LSquare),
-            ']' => tokens.push(Token::RSquare),
-            '{' => tokens.push(Token::LBrace),
-            '}' => tokens.push(Token::RBrace),
-            ';' => tokens.push(Token::Semicolon),
-            ',' => tokens.push(Token::Comma),
-            '.' => tokens.push(Token::Dot),
-            '+' => tokens.push(Token::Plus),
-            '-' => match chars.peek() {
-                Some('>') => push_and_advance(&mut chars, &mut tokens, Token::RArrow),
-                _ => tokens.push(Token::Minus),
-            },
-            '*' => tokens.push(Token::Star),
-            '/' => tokens.push(Token::Slash),
-
-            // Unexpected
-            _ => return Err(Error::Custom(format!("Unexpected token: {}", char))),
-        }
-    }
-
-    tokens.push(Token::EOF);
-    Ok(tokens)
-}
-
-fn push_and_advance(chars: &mut Peekable<Chars>, tokens: &mut Vec<Token>, token: Token) {
-    chars.next();
-    tokens.push(token);
-}
-
-fn tokenize_identifier(first_char: char, chars: &mut Peekable<Chars>) -> Result<Token, Error> {
-    let mut identifier = first_char.to_string();
-    while let Some(&char) = chars.peek() {
-        if char.is_alphanumeric() || char == '_' {
-            identifier.push(char);
-            chars.next();
-        } else {
-            break;
-        }
-    }
-
-    Ok(match identifier.as_str() {
-        "var" => Token::Var,
-        "node" => Token::Node,
-        "const" => Token::Const,
-        "obj" => Token::Obj,
-        "func" => Token::Func,
-        "return" => Token::Return,
-        "for" => Token::For,
-        "while" => Token::While,
-        "continue" => Token::Continue,
-        "break" => Token::Break,
-        "if" => Token::If,
-        "else" => Token::Else,
-        "true" => Token::True,
-        "false" => Token::False,
-        "priv" => Token::Priv,
-        "pub" => Token::Pub,
-        "Bool" => Token::Bool,
-        "Int8" => Token::Int8,
-        "Int16" => Token::Int16,
-        "Int32" => Token::Int32,
-        "Int64" => Token::Int64,
-        "Int128" => Token::Int128,
-        "Uint8" => Token::Uint8,
-        "Uint16" => Token::Uint16,
-        "Uint32" => Token::Uint32,
-        "Uint64" => Token::Uint64,
-        "Uint128" => Token::Uint128,
-        "Float32" => Token::Float32,
-        "Float64" => Token::Float64,
-        "Str" => Token::String,
-        "Ptr" => Token::Pointer,
-        _ => Token::Identifier(identifier),
-    })
-}
-
-fn tokenize_number(first_char: char, chars: &mut Peekable<Chars>) -> Result<Token, Error> {
-    let mut number = first_char.to_string();
-    let mut has_dot = false;
-    while let Some(&char) = chars.peek() {
-        if char.is_ascii_digit() {
-            number.push(char);
-            chars.next();
-        } else if !has_dot && char == '.' {
-            let mut lookahead = chars.clone();
-            lookahead.next();
-            if let Some(&char_after_dot) = lookahead.peek() {
-                if !char_after_dot.is_ascii_digit() {
-                    break;
+impl<'a> Lexer<'a> {
+    pub(super) fn tokenize_chars(&mut self) -> Result<Token<'a>, Error> {
+        match self.peek() {
+            Some(c) => match c {
+                'a'..='z' | 'A'..='Z' | '_' => self.tokenize_identifier(),
+                '0'..='9' => self.tokenize_number(),
+                '"' => self.tokenize_string(),
+                '@' => self.tokenize_raw_string(),
+                '=' => {
+                    self.tokenize_double_symbol(Some(TokenKind::Assign), &[('=', TokenKind::Equal)])
                 }
-                has_dot = true;
-                number.push(char);
-                chars.next();
+                ':' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::Colon, self.line, self.column))
+                }
+                '!' => self.tokenize_double_symbol(
+                    Some(TokenKind::Not),
+                    &[
+                        ('=', TokenKind::NotEqual),
+                        ('|', TokenKind::Nor),
+                        ('&', TokenKind::Nand),
+                        ('^', TokenKind::Xnor),
+                    ],
+                ),
+                '<' => self.tokenize_double_symbol(
+                    Some(TokenKind::LessThan),
+                    &[
+                        ('=', TokenKind::LessEqual),
+                        ('|', TokenKind::LPipe),
+                        ('-', TokenKind::LArrow),
+                    ],
+                ),
+                '>' => self.tokenize_double_symbol(
+                    Some(TokenKind::GreaterThan),
+                    &[('=', TokenKind::GreaterEqual)],
+                ),
+                '|' => self
+                    .tokenize_double_symbol(None, &[('|', TokenKind::Or), ('>', TokenKind::RPipe)]),
+                '&' => self.tokenize_double_symbol(None, &[('&', TokenKind::And)]),
+                '^' => self.tokenize_double_symbol(Some(TokenKind::Pow), &[('^', TokenKind::Xor)]),
+                '(' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::LParen, self.line, self.column))
+                }
+                ')' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::RParen, self.line, self.column))
+                }
+                '[' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::LSquare, self.line, self.column))
+                }
+                ']' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::RSquare, self.line, self.column))
+                }
+                '{' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::LBrace, self.line, self.column))
+                }
+                '}' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::RBrace, self.line, self.column))
+                }
+                ';' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::Semicolon, self.line, self.column))
+                }
+                ',' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::Comma, self.line, self.column))
+                }
+                '.' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::Dot, self.line, self.column))
+                }
+                '+' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::Plus, self.line, self.column))
+                }
+                '-' => {
+                    self.tokenize_double_symbol(Some(TokenKind::Minus), &[('>', TokenKind::RArrow)])
+                }
+                '*' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::Star, self.line, self.column))
+                }
+                '/' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::Slash, self.line, self.column))
+                }
+                _ => {
+                    return Err(Error::Custom(format!(
+                        "[{}, {}] Unexpected token",
+                        self.line, self.column
+                    )));
+                }
+            },
+            None => Err(Error::Custom("Unexpected end of file".to_string())),
+        }
+    }
+
+    fn tokenize_identifier(&mut self) -> Result<Token<'a>, Error> {
+        let start_index = self.current;
+        while let Some(char) = self.peek() {
+            if char.is_alphanumeric() || char == '_' {
+                self.advance();
             } else {
                 break;
             }
-        } else {
-            break;
         }
+        let identifier = &self.code[start_index..self.current];
+
+        let kind = match identifier {
+            "var" => TokenKind::Var,
+            "node" => TokenKind::Node,
+            "const" => TokenKind::Const,
+            "obj" => TokenKind::Obj,
+            "func" => TokenKind::Func,
+            "return" => TokenKind::Return,
+            "for" => TokenKind::For,
+            "while" => TokenKind::While,
+            "continue" => TokenKind::Continue,
+            "break" => TokenKind::Break,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
+            "pub" => TokenKind::Pub,
+            "import" => TokenKind::Import,
+            "Bool" => TokenKind::Bool,
+            "Int8" => TokenKind::Int8,
+            "Int16" => TokenKind::Int16,
+            "Int32" => TokenKind::Int32,
+            "Int64" => TokenKind::Int64,
+            "Int128" => TokenKind::Int128,
+            "Uint8" => TokenKind::Uint8,
+            "Uint16" => TokenKind::Uint16,
+            "Uint32" => TokenKind::Uint32,
+            "Uint64" => TokenKind::Uint64,
+            "Uint128" => TokenKind::Uint128,
+            "Float32" => TokenKind::Float32,
+            "Float64" => TokenKind::Float64,
+            "Str" => TokenKind::String,
+            "Ptr" => TokenKind::Pointer,
+            _ => TokenKind::Identifier(identifier),
+        };
+
+        Ok(Token::new(kind, self.line, self.column))
     }
 
-    Ok(Token::Number(number))
-}
+    fn tokenize_number(&mut self) -> Result<Token<'a>, Error> {
+        let start_line = self.line;
+        let start_col = self.column;
+        let start_index = self.current;
+        let mut has_dot = false;
 
-fn tokenize_string(chars: &mut Peekable<Chars>) -> Result<Token, Error> {
-    let mut string = String::new();
-    while let Some(char) = chars.next() {
-        match char {
-            '"' => return Ok(Token::StringLiteral(string)),
-            '\\' => {
-                let next = chars
-                    .next()
-                    .ok_or(Error::Custom("Invalid escape".to_string()))?;
-                match next {
-                    'n' => string.push('\n'),
-                    't' => string.push('\t'),
-                    '"' => string.push('\"'),
-                    '\\' => string.push('\\'),
-                    _ => return Err(Error::Custom("Unknown escape".to_string())),
+        while let Some(char) = self.peek() {
+            if char.is_ascii_digit() {
+                self.advance();
+            } else if !has_dot && char == '.' {
+                if let Some(next) = self.peek_next() {
+                    if !next.is_ascii_digit() {
+                        break;
+                    }
+                    has_dot = true;
+                    self.advance();
+                } else {
+                    break;
                 }
+            } else {
+                break;
             }
-            _ => string.push(char),
+        }
+
+        Ok(Token::new(
+            TokenKind::Number(&self.code[start_index..self.current]),
+            start_line,
+            start_col,
+        ))
+    }
+
+    fn tokenize_string(&mut self) -> Result<Token<'a>, Error> {
+        let start_line = self.line;
+        let start_col = self.column;
+
+        self.advance();
+
+        let start_index = self.current;
+
+        while let Some(c) = self.peek() {
+            match c {
+                '"' => break,
+                '\\' => {
+                    self.advance();
+                    if let None = self.peek() {
+                        break;
+                    }
+                    self.advance();
+                }
+                _ => self.advance(),
+            }
+        }
+
+        if self.is_at_end() {
+            return Err(Error::Custom(format!(
+                "[{}, {}] Unterminated string literal",
+                start_line, start_col
+            )));
+        }
+
+        let value = &self.code[start_index..self.current];
+        self.advance();
+
+        Ok(Token::new(
+            TokenKind::StringLiteral(value),
+            start_line,
+            start_col,
+        ))
+    }
+
+    fn tokenize_raw_string(&mut self) -> Result<Token<'a>, Error> {
+        let start_line = self.line;
+        let start_col = self.column;
+
+        self.advance();
+
+        let start_index = self.current;
+
+        while let Some(c) = self.peek() {
+            match c {
+                '"' => break,
+                _ => self.advance(),
+            }
+        }
+
+        if self.is_at_end() {
+            return Err(Error::Custom(format!(
+                "[{}, {}] Unterminated string literal",
+                start_line, start_col
+            )));
+        }
+
+        let value = &self.code[start_index..self.current];
+        self.advance();
+
+        Ok(Token::new(
+            TokenKind::StringLiteral(value),
+            start_line,
+            start_col,
+        ))
+    }
+
+    fn tokenize_double_symbol(
+        &mut self,
+        fallback: Option<TokenKind<'a>>,
+        matches: &[(char, TokenKind<'a>)],
+    ) -> Result<Token<'a>, Error> {
+        self.advance();
+        let peek = self.peek();
+        let start_line = self.line;
+        let start_col = self.column;
+
+        for (c, k) in matches {
+            if Some(*c) == peek {
+                self.advance();
+                return Ok(Token::new(*k, start_line, start_col));
+            }
+        }
+
+        match fallback {
+            Some(f) => Ok(Token::new(f, start_line, start_col)),
+            None => Err(Error::Custom(format!(
+                "[{}, {}] Unexpected token",
+                self.line, self.column
+            ))),
         }
     }
-
-    Err(Error::Custom("Unterminated string".to_string()))
-}
-
-fn tokenize_raw_string(chars: &mut Peekable<Chars>) -> Result<Token, Error> {
-    let mut string = String::new();
-    if chars.next() != Some('"') {
-        return Err(Error::Custom("Invalid raw string".to_string()));
-    }
-
-    while let Some(char) = chars.next() {
-        match char {
-            '"' => return Ok(Token::StringLiteral(string)),
-            _ => string.push(char),
-        }
-    }
-
-    Err(Error::Custom("Unterminated string".to_string()))
 }

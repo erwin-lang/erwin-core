@@ -1,11 +1,12 @@
 use std::{env::args, fs::read_to_string, path::Path};
 
-use crate::{error::Error, lexer::lexer::tokenize, runtime::runtime::execute};
+use crate::{error::Error, lexer::Lexer, parser::Parser, runtime::runtime::execute};
 
 mod error;
 mod lexer;
 mod parser;
 mod runtime;
+mod syntax;
 
 fn main() -> Result<(), Error> {
     let args = args().collect::<Vec<String>>();
@@ -15,8 +16,11 @@ fn main() -> Result<(), Error> {
     let file_path = Path::new(&args[1]);
     let code = read_to_string(file_path)?;
 
-    let tokens = tokenize(&code)?;
-    let ast = parse(tokens)?;
+    let mut lexer = Lexer::new(code.as_str());
+    let tokens = lexer.tokenize()?;
+
+    let mut parser = Parser::new(tokens);
+    let ast = parser.parse()?;
     execute()?;
 
     Ok(())

@@ -1,5 +1,19 @@
-pub enum Token {
-    Identifier(String),
+#[derive(Clone, Copy)]
+pub(crate) struct Token<'a> {
+    pub(crate) kind: TokenKind<'a>,
+    pub(crate) line: usize,
+    pub(crate) column: usize,
+}
+
+impl<'a> Token<'a> {
+    pub(crate) fn new(kind: TokenKind<'a>, line: usize, column: usize) -> Self {
+        Self { kind, line, column }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TokenKind<'a> {
+    Identifier(&'a str),
 
     // Keywords
     Var,      // Variable definition
@@ -16,8 +30,8 @@ pub enum Token {
     Else,     // Else block
     True,     // Boolean true
     False,    // Boolean false
-    Priv,     // Private visibility modifier
     Pub,      // Public visibility modifier
+    Import,   // Import another module
 
     // Primitive types
     Bool,
@@ -35,10 +49,11 @@ pub enum Token {
     Float64,
     String,
     Pointer,
+    Byte,
 
     // Values
-    Number(String),
-    StringLiteral(String),
+    Number(&'a str),
+    StringLiteral(&'a str),
 
     // Assign
     Assign, // =
