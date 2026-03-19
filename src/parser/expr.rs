@@ -15,26 +15,45 @@ impl<'a> Parser<'a> {
     fn parse_lambda(&mut self) -> Result<Expr<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.column;
-        let mut expr = self.parse_pipe()?;
+        let expr = self.parse_pipe()?;
 
         if matches!(self.peek(0)?.kind, TokenKind::RArrow) {
             self.advance()?;
 
             let body = self.parse_lambda()?;
-            let param_str = match expr {
-                Expr::Identifier(name) => name,
+
+            let params = match expr {
+                Expr::Identifier(name) => vec![name],
+                Expr::Tuple(items) => {
+                    let mut names = Vec::new();
+
+                    for item in items {
+                        if let Expr::Identifier(name) = item {
+                            names.push(name);
+                        } else {
+                            return self.loc_error(
+                                start_line,
+                                start_col,
+                                "Lambda parameters must be simple identifiers",
+                            );
+                        }
+                    }
+
+                    names
+                }
                 _ => {
                     return self.loc_error(
                         start_line,
                         start_col,
-                        "Invalid lambda function parameter",
+                        "Invalid lambda function parameter syntax",
                     );
                 }
             };
-            expr = Expr::Lambda {
-                param: param_str,
+
+            return Ok(Expr::Lambda {
+                params,
                 body: Box::new(body),
-            }
+            });
         }
 
         Ok(expr)

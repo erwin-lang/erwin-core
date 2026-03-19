@@ -62,13 +62,30 @@ impl<'a> Parser<'a> {
             self.advance()?;
             base_type = Type::Pointer(Box::new(base_type));
         }
+
+        if matches!(self.peek(0)?.kind, TokenKind::RArrow) {
+            self.advance()?;
+
+            let return_ty = self.parse_type()?;
+
+            let params = match base_type {
+                Type::Tuple(types) => types,
+                other => vec![other],
+            };
+
+            base_type = Type::Function {
+                params,
+                return_ty: Box::new(return_ty),
+            };
+        }
+
         Ok(base_type)
     }
 
     fn parse_tuple_type(&mut self) -> Result<Type<'a>, Error> {
         self.advance()?;
 
-        let types = self.parse_comma_separated(|p| p.parse_type())?;
+        let mut types = self.parse_comma_separated(|p| p.parse_type())?;
 
         if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
             return self.error("Expected ')'");
@@ -76,7 +93,10 @@ impl<'a> Parser<'a> {
 
         self.advance()?;
 
-        Ok(Type::Tuple(types))
+        match types.len() {
+            1 => Ok(types.remove(0)),
+            _ => Ok(Type::Tuple(types)),
+        }
     }
 
     fn parse_array_type(&mut self) -> Result<Type<'a>, Error> {

@@ -97,13 +97,22 @@ pub struct Field<'a> {
 
 pub enum Type<'a> {
     Bool,
-    Integer { size: IntSize, sign: Sign },
-    Float { size: FloatSize },
+    Integer {
+        size: IntSize,
+        sign: Sign,
+    },
+    Float {
+        size: FloatSize,
+    },
     String,
     Pointer(Box<Type<'a>>),
     Tuple(Vec<Type<'a>>),
     Array(Box<Type<'a>>),
     Byte,
+    Function {
+        params: Vec<Type<'a>>,
+        return_ty: Box<Type<'a>>,
+    },
     Custom(&'a str),
 }
 
@@ -147,7 +156,7 @@ pub enum Expr<'a> {
         right: Box<Expr<'a>>,
     },
     Lambda {
-        param: &'a str,
+        params: Vec<&'a str>,
         body: Box<Expr<'a>>,
     },
 }
