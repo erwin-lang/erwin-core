@@ -14,13 +14,13 @@ pub(crate) enum Statement<'a> {
         identifier: &'a str,
         ty: Option<Type<'a>>,
         value: Expr<'a>,
-        body: Option<Vec<Statement<'a>>>,
+        body: Vec<Statement<'a>>,
     },
     Func {
         visibility: Visibility,
         identifier: &'a str,
-        params: Option<Vec<Param<'a>>>,
-        return_ty: Option<Type<'a>>,
+        params: Vec<Param<'a>>,
+        return_ty: Type<'a>,
         body: Vec<Statement<'a>>,
     },
     For {
@@ -135,7 +135,7 @@ pub enum Expr<'a> {
     Array(Vec<Expr<'a>>),
     Call {
         base: Box<Expr<'a>>,
-        args: Option<Vec<Expr<'a>>>,
+        args: Vec<Expr<'a>>,
     },
     Unary {
         op: UnaryOp,

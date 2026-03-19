@@ -110,35 +110,16 @@ impl<'a> Parser<'a> {
             return self.error("Expected expression");
         };
 
-        if !matches!(self.peek(0)?.kind, TokenKind::Semicolon | TokenKind::LBrace) {
-            return self.error("Expected ';' or '{'");
+        let mut body = Vec::new();
+
+        match self.peek(0)?.kind {
+            TokenKind::Semicolon => self.advance()?,
+            TokenKind::LBrace => {
+                body = self.parse_block()?;
+            }
+            _ => return self.error("Expected ';' or '{'"),
         }
 
-        let mut body = None;
-
-        if matches!(self.peek(0)?.kind, TokenKind::LBrace) {
-            let brace_line = self.peek(0)?.line;
-            let brace_col = self.peek(0)?.column;
-
-            self.advance()?;
-            let mut stmts = Vec::new();
-
-            while !matches!(self.peek(0)?.kind, TokenKind::EOF) {
-                if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
-                    break;
-                }
-
-                stmts.push(self.parse_statement()?);
-            }
-
-            if matches!(self.peek(0)?.kind, TokenKind::EOF) {
-                return self.loc_error(brace_line, brace_col, "Unterminated node body");
-            }
-
-            body = Some(stmts);
-        };
-
-        self.advance()?;
         Ok(Statement::NodeDeclare {
             visibility,
             identifier,
@@ -152,6 +133,44 @@ impl<'a> Parser<'a> {
         &mut self,
         visibility: Visibility,
     ) -> Result<Statement<'a>, Error> {
+        self.advance()?;
+
+        let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
+            self.advance()?;
+            name
+        } else {
+            return self.error("Expected function name");
+        };
+
+        if !matches!(self.peek(0)?.kind, TokenKind::LParen) {
+            return self.error("Expected '('");
+        }
+
+        self.advance()?;
+        let params = self.parse_comma_separated(|parser| parser.parse_param())?;
+
+        if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
+            return self.error("Expected ')'");
+        }
+
+        self.advance()?;
+
+        if !matches!(self.peek(0)?.kind, TokenKind::RArrow) {
+            return self.error("Expected '->'");
+        }
+
+        self.advance()?;
+
+        let ty = self.parse_type()?;
+        let body = self.parse_block()?;
+
+        Ok(Statement::Func {
+            visibility,
+            identifier: id,
+            params,
+            return_ty: ty,
+            body,
+        })
     }
 
     pub(super) fn parse_for(&mut self) -> Result<Statement<'a>, Error> {}

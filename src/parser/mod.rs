@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::syntax::ast::Statement;
+use crate::syntax::ast::{Param, Statement};
 use crate::syntax::token::{Token, TokenKind};
 
 pub(crate) mod expr;
@@ -47,6 +47,74 @@ impl<'a> Parser<'a> {
         }
 
         Ok(path)
+    }
+
+    pub(super) fn parse_block(&mut self) -> Result<Vec<Statement<'a>>, Error> {
+        let brace_line = self.peek(0)?.line;
+        let brace_col = self.peek(0)?.column;
+        let mut stmts = Vec::new();
+        self.advance()?;
+
+        while !matches!(self.peek(0)?.kind, TokenKind::EOF) {
+            if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
+                self.advance()?;
+                break;
+            }
+            stmts.push(self.parse_statement()?);
+        }
+
+        if matches!(self.peek(0)?.kind, TokenKind::EOF) {
+            return self.loc_error(brace_line, brace_col, "Unterminated block");
+        }
+
+        Ok(stmts)
+    }
+
+    pub(super) fn parse_comma_separated<T, F>(&mut self, mut parse_item: F) -> Result<Vec<T>, Error>
+    where
+        F: FnMut(&mut Self) -> Result<T, Error>,
+    {
+        let mut items = Vec::new();
+
+        if matches!(self.peek(0)?.kind, TokenKind::RParen | TokenKind::RSquare) {
+            return Ok(items);
+        }
+
+        loop {
+            items.push(parse_item(self)?);
+
+            if matches!(self.peek(0)?.kind, TokenKind::Comma) {
+                self.advance()?;
+
+                if matches!(self.peek(0)?.kind, TokenKind::RParen | TokenKind::RSquare) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(items)
+    }
+
+    pub(super) fn parse_param(&mut self) -> Result<Param<'a>, Error> {
+        let id = match self.peek(0)?.kind {
+            TokenKind::Identifier(id) => {
+                self.advance()?;
+                id
+            }
+            _ => return self.error("Expected parameter identifier"),
+        };
+
+        if !matches!(self.peek(0)?.kind, TokenKind::Colon) {
+            return self.error("Expected ':'");
+        }
+
+        self.advance()?;
+
+        let ty = self.parse_type()?;
+
+        Ok(Param { identifier: id, ty })
     }
 
     pub(super) fn peek(&self, offset: isize) -> Result<&Token<'a>, Error> {

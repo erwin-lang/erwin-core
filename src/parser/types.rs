@@ -66,35 +66,15 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_tuple_type(&mut self) -> Result<Type<'a>, Error> {
-        let mut types = Vec::new();
-        let paren_line = self.peek(0)?.line;
-        let paren_col = self.peek(0)?.column;
         self.advance()?;
 
-        if matches!(self.peek(0)?.kind, TokenKind::RParen) {
-            return self.error("Tuple must have at least one type");
+        let types = self.parse_comma_separated(|p| p.parse_type())?;
+
+        if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
+            return self.error("Expected ')'");
         }
 
-        types.push(self.parse_type()?);
-
-        while !matches!(self.peek(0)?.kind, TokenKind::EOF) {
-            match self.peek(0)?.kind {
-                TokenKind::Comma => {
-                    self.advance()?;
-                    types.push(self.parse_type()?);
-                }
-                TokenKind::RParen => {
-                    break;
-                }
-                _ => {
-                    return self.error("Expected ',' or ')'");
-                }
-            }
-        }
-
-        if matches!(self.peek(0)?.kind, TokenKind::EOF) {
-            return self.loc_error(paren_line, paren_col, "Unterminated tuple type");
-        }
+        self.advance()?;
 
         Ok(Type::Tuple(types))
     }

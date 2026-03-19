@@ -277,36 +277,18 @@ impl<'a> Parser<'a> {
         while matches!(self.peek(0)?.kind, TokenKind::LParen) {
             self.advance()?;
 
-            if matches!(self.peek(0)?.kind, TokenKind::RParen) {
-                self.advance()?;
-                base = Expr::Call {
-                    base: Box::new(base),
-                    args: None,
-                };
-                continue;
+            let args = self.parse_comma_separated(|parser| parser.parse_expr())?;
+
+            if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
+                return self.error("Expected ')'");
             }
 
-            let mut args = Vec::new();
-            args.push(self.parse_expr()?);
-
-            loop {
-                match self.peek(0)?.kind {
-                    TokenKind::Comma => {
-                        self.advance()?;
-                        args.push(self.parse_expr()?);
-                    }
-                    TokenKind::RParen => {
-                        self.advance()?;
-                        break;
-                    }
-                    _ => return self.error("Expected ',' or ')'"),
-                }
-            }
+            self.advance()?;
 
             base = Expr::Call {
                 base: Box::new(base),
-                args: Some(args),
-            }
+                args,
+            };
         }
 
         Ok(base)
@@ -340,41 +322,35 @@ impl<'a> Parser<'a> {
             }
             TokenKind::LParen => {
                 self.advance()?;
-                let expr = self.parse_expr()?;
+
+                let first_expr = self.parse_expr()?;
 
                 if matches!(self.peek(0)?.kind, TokenKind::Comma) {
-                    let mut items = vec![expr];
-
-                    while matches!(self.peek(0)?.kind, TokenKind::Comma) {
-                        self.advance()?;
-                        items.push(self.parse_expr()?);
-                    }
-                    if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
-                        return self.error("Unterminated tuple, expected ')'");
-                    }
-
                     self.advance()?;
+
+                    let mut items = vec![first_expr];
+                    items.extend(self.parse_comma_separated(|p| p.parse_expr())?);
+
+                    if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
+                        return self.error("Expected ')'");
+                    }
+
                     Ok(Expr::Tuple(items))
                 } else {
                     if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
-                        return self.error("Unterminated group, expected ')'");
+                        return self.error("Expected ')'");
                     }
 
-                    self.advance()?;
-                    Ok(expr)
+                    Ok(first_expr)
                 }
             }
             TokenKind::LSquare => {
                 self.advance()?;
-                let mut items = Vec::new();
-                items.push(self.parse_expr()?);
 
-                while matches!(self.peek(0)?.kind, TokenKind::Comma) {
-                    self.advance()?;
-                    items.push(self.parse_expr()?);
-                }
+                let items = self.parse_comma_separated(|p| p.parse_expr())?;
+
                 if !matches!(self.peek(0)?.kind, TokenKind::RSquare) {
-                    return self.error("Unterminated array, expected ']'");
+                    return self.error("Expected ']'");
                 }
 
                 self.advance()?;
