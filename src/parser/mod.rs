@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::syntax::ast::{Param, Statement};
+use crate::syntax::ast::{Expr, Field, InstanceField, Param, Statement, Variant, Visibility};
 use crate::syntax::token::{Token, TokenKind};
 
 pub(crate) mod expr;
@@ -37,7 +37,7 @@ impl<'a> Parser<'a> {
                 return self.error("Expected identifier in path");
             }
 
-            if matches!(self.peek(0)?.kind, TokenKind::Dot)
+            if matches!(self.peek(0)?.kind, TokenKind::DoubleColon)
                 && matches!(self.peek(1)?.kind, TokenKind::Identifier(_))
             {
                 self.advance()?;
@@ -47,27 +47,6 @@ impl<'a> Parser<'a> {
         }
 
         Ok(path)
-    }
-
-    pub(super) fn parse_block(&mut self) -> Result<Vec<Statement<'a>>, Error> {
-        let brace_line = self.peek(0)?.line;
-        let brace_col = self.peek(0)?.column;
-        let mut stmts = Vec::new();
-        self.advance()?;
-
-        while !matches!(self.peek(0)?.kind, TokenKind::EOF) {
-            if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
-                self.advance()?;
-                break;
-            }
-            stmts.push(self.parse_statement()?);
-        }
-
-        if matches!(self.peek(0)?.kind, TokenKind::EOF) {
-            return self.loc_error(brace_line, brace_col, "Unterminated block");
-        }
-
-        Ok(stmts)
     }
 
     pub(super) fn parse_comma_separated<T, F>(&mut self, mut parse_item: F) -> Result<Vec<T>, Error>
@@ -106,15 +85,95 @@ impl<'a> Parser<'a> {
             _ => return self.error("Expected parameter identifier"),
         };
 
-        if !matches!(self.peek(0)?.kind, TokenKind::Colon) {
-            return self.error("Expected ':'");
-        }
-
-        self.advance()?;
-
+        self.consume(TokenKind::Colon, "Expected ':'")?;
         let ty = self.parse_type()?;
 
-        Ok(Param { identifier: id, ty })
+        Ok(Param { id, ty })
+    }
+
+    pub(super) fn parse_field(&mut self) -> Result<Field<'a>, Error> {
+        let visibility = if matches!(self.peek(0)?.kind, TokenKind::Pub) {
+            self.advance()?;
+            Visibility::Pub
+        } else {
+            Visibility::Priv
+        };
+
+        let id = match self.peek(0)?.kind {
+            TokenKind::Identifier(id) => {
+                self.advance()?;
+                id
+            }
+            _ => return self.error("Expected field identifier"),
+        };
+
+        self.consume(TokenKind::Colon, "Expected ':'")?;
+        let ty = self.parse_type()?;
+
+        Ok(Field { visibility, id, ty })
+    }
+
+    pub(super) fn parse_instance_field(&mut self) -> Result<InstanceField<'a>, Error> {
+        let id = match self.peek(0)?.kind {
+            TokenKind::Identifier(id) => {
+                self.advance()?;
+                id
+            }
+            _ => return self.error("Expected field identifier"),
+        };
+
+        self.consume(TokenKind::Colon, "Expected ':'")?;
+        let value = self.parse_expr()?;
+
+        Ok(InstanceField { id, value })
+    }
+
+    pub(super) fn parse_variant(&mut self) -> Result<Variant<'a>, Error> {
+        let id = match self.peek(0)?.kind {
+            TokenKind::Identifier(id) => {
+                self.advance()?;
+                id
+            }
+            _ => return self.error("Expected variant identifier"),
+        };
+
+        let mut data = Vec::new();
+        if matches!(self.peek(0)?.kind, TokenKind::LParen) {
+            self.advance()?;
+            data = self.parse_comma_separated(|p| p.parse_type())?;
+            self.consume(TokenKind::RParen, "Expected ')'")?;
+        }
+
+        Ok(Variant { id, data })
+    }
+
+    pub(super) fn is_brace_terminated(&self, expr: &Expr<'a>) -> bool {
+        match expr {
+            Expr::If {
+                condition: _,
+                do_body,
+                else_body,
+            }
+            | Expr::While {
+                condition: _,
+                do_body,
+                else_body,
+            }
+            | Expr::For {
+                iter: _,
+                range: _,
+                do_body,
+                else_body,
+            } => {
+                if let Some(else_branch) = else_body {
+                    self.is_brace_terminated(else_branch)
+                } else {
+                    self.is_brace_terminated(do_body)
+                }
+            }
+            Expr::Block(_) => true,
+            _ => false,
+        }
     }
 
     pub(super) fn peek(&self, offset: isize) -> Result<&Token<'a>, Error> {
@@ -137,6 +196,14 @@ impl<'a> Parser<'a> {
         }
         self.current += 1;
         Ok(())
+    }
+
+    pub(super) fn consume(&mut self, token: TokenKind, err: &str) -> Result<(), Error> {
+        if !matches!(self.peek(0)?.kind, token) {
+            return self.error(err);
+        }
+
+        self.advance()
     }
 
     pub(super) fn error<T>(&self, msg: &str) -> Result<T, Error> {

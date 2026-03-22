@@ -10,53 +10,91 @@ use crate::{
 impl<'a> Parser<'a> {
     pub(super) fn parse_type(&mut self) -> Result<Type<'a>, Error> {
         let mut base_type = match self.peek(0)?.kind {
-            TokenKind::Bool => Type::Bool,
-            TokenKind::Int8 => Type::Integer {
-                size: IntSize::B8,
-                sign: Sign::Signed,
-            },
-            TokenKind::Int16 => Type::Integer {
-                size: IntSize::B16,
-                sign: Sign::Signed,
-            },
-            TokenKind::Int32 => Type::Integer {
-                size: IntSize::B32,
-                sign: Sign::Signed,
-            },
-            TokenKind::Int64 => Type::Integer {
-                size: IntSize::B64,
-                sign: Sign::Signed,
-            },
-            TokenKind::Uint8 => Type::Integer {
-                size: IntSize::B8,
-                sign: Sign::Unsigned,
-            },
-            TokenKind::Uint16 => Type::Integer {
-                size: IntSize::B16,
-                sign: Sign::Unsigned,
-            },
-            TokenKind::Uint32 => Type::Integer {
-                size: IntSize::B32,
-                sign: Sign::Unsigned,
-            },
-            TokenKind::Uint64 => Type::Integer {
-                size: IntSize::B64,
-                sign: Sign::Unsigned,
-            },
-            TokenKind::Float32 => Type::Float {
-                size: FloatSize::B32,
-            },
-            TokenKind::Float64 => Type::Float {
-                size: FloatSize::B64,
-            },
-            TokenKind::String => Type::String,
+            TokenKind::Bool => {
+                self.advance()?;
+                Type::Bool
+            }
+            TokenKind::Int8 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B8,
+                    sign: Sign::Signed,
+                }
+            }
+            TokenKind::Int16 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B16,
+                    sign: Sign::Signed,
+                }
+            }
+            TokenKind::Int32 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B32,
+                    sign: Sign::Signed,
+                }
+            }
+            TokenKind::Int64 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B64,
+                    sign: Sign::Signed,
+                }
+            }
+            TokenKind::Uint8 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B8,
+                    sign: Sign::Unsigned,
+                }
+            }
+            TokenKind::Uint16 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B16,
+                    sign: Sign::Unsigned,
+                }
+            }
+            TokenKind::Uint32 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B32,
+                    sign: Sign::Unsigned,
+                }
+            }
+            TokenKind::Uint64 => {
+                self.advance()?;
+                Type::Integer {
+                    size: IntSize::B64,
+                    sign: Sign::Unsigned,
+                }
+            }
+            TokenKind::Float32 => {
+                self.advance()?;
+                Type::Float {
+                    size: FloatSize::B32,
+                }
+            }
+            TokenKind::Float64 => {
+                self.advance()?;
+                Type::Float {
+                    size: FloatSize::B64,
+                }
+            }
+            TokenKind::String => {
+                self.advance()?;
+                Type::String
+            }
             TokenKind::LParen => self.parse_tuple_type()?,
             TokenKind::LSquare => self.parse_array_type()?,
-            TokenKind::Byte => Type::Byte,
-            TokenKind::Identifier(ty) => Type::Custom(ty),
+            TokenKind::Byte => {
+                self.advance()?;
+                Type::Byte
+            }
+            TokenKind::Identifier(_) => Type::Custom(self.parse_path()?),
             _ => return self.error("Invalid type"),
         };
-        self.advance()?;
 
         while matches!(self.peek(0)?.kind, TokenKind::Star) {
             self.advance()?;
@@ -86,12 +124,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
 
         let mut types = self.parse_comma_separated(|p| p.parse_type())?;
-
-        if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
-            return self.error("Expected ')'");
-        }
-
-        self.advance()?;
+        self.consume(TokenKind::RParen, "Expected ')'");
 
         match types.len() {
             1 => Ok(types.remove(0)),
@@ -108,9 +141,7 @@ impl<'a> Parser<'a> {
 
         let ty = Box::new(self.parse_type()?);
 
-        if !matches!(self.peek(0)?.kind, TokenKind::RSquare) {
-            return self.error("Unterminated array type");
-        }
+        self.consume(TokenKind::RSquare, "Expected ']'");
 
         Ok(Type::Array(ty))
     }

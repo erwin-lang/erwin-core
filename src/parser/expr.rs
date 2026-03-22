@@ -15,7 +15,7 @@ impl<'a> Parser<'a> {
     fn parse_lambda(&mut self) -> Result<Expr<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.column;
-        let expr = self.parse_pipe()?;
+        let expr = self.parse_control()?;
 
         if matches!(self.peek(0)?.kind, TokenKind::RArrow) {
             self.advance()?;
@@ -57,6 +57,73 @@ impl<'a> Parser<'a> {
         }
 
         Ok(expr)
+    }
+
+    fn parse_control(&mut self) -> Result<Expr<'a>, Error> {
+        match self.peek(0)?.kind {
+            TokenKind::If => {
+                self.advance()?;
+                let condition = Box::new(self.parse_expr()?);
+
+                self.consume(TokenKind::Do, "Expected 'do'")?;
+                let do_body = Box::new(self.parse_expr()?);
+
+                let mut else_body = None;
+                if matches!(self.peek(0)?.kind, TokenKind::Else) {
+                    self.advance()?;
+                    else_body = Some(Box::new(self.parse_expr()?));
+                }
+
+                Ok(Expr::If {
+                    condition,
+                    do_body,
+                    else_body,
+                })
+            }
+            TokenKind::For => {
+                self.advance()?;
+                let iter = Box::new(self.parse_expr()?);
+
+                self.consume(TokenKind::In, "Expected 'in'")?;
+                let range = Box::new(self.parse_expr()?);
+
+                self.consume(TokenKind::Do, "Expected 'do'")?;
+                let do_body = Box::new(self.parse_expr()?);
+
+                let mut else_body = None;
+                if matches!(self.peek(0)?.kind, TokenKind::Else) {
+                    self.advance()?;
+                    else_body = Some(Box::new(self.parse_expr()?));
+                }
+
+                Ok(Expr::For {
+                    iter,
+                    range,
+                    do_body,
+                    else_body,
+                })
+            }
+            TokenKind::While => {
+                self.advance()?;
+                let condition = Box::new(self.parse_expr()?);
+
+                self.consume(TokenKind::Do, "Expected 'do'")?;
+                let do_body = Box::new(self.parse_expr()?);
+
+                let mut else_body = None;
+                if matches!(self.peek(0)?.kind, TokenKind::Else) {
+                    self.advance()?;
+                    else_body = Some(Box::new(self.parse_expr()?));
+                }
+
+                Ok(Expr::While {
+                    condition,
+                    do_body,
+                    else_body,
+                })
+            }
+            _ => self.parse_pipe(),
+        }
     }
 
     fn parse_pipe(&mut self) -> Result<Expr<'a>, Error> {
@@ -287,27 +354,42 @@ impl<'a> Parser<'a> {
             });
         }
 
-        self.parse_call()
+        self.parse_postfix()
     }
 
-    fn parse_call(&mut self) -> Result<Expr<'a>, Error> {
+    fn parse_postfix(&mut self) -> Result<Expr<'a>, Error> {
         let mut base = self.parse_primary()?;
 
-        while matches!(self.peek(0)?.kind, TokenKind::LParen) {
-            self.advance()?;
+        loop {
+            match self.peek(0)?.kind {
+                TokenKind::LParen => {
+                    self.advance()?;
 
-            let args = self.parse_comma_separated(|parser| parser.parse_expr())?;
+                    let args = self.parse_comma_separated(|parser| parser.parse_expr())?;
+                    self.consume(TokenKind::RParen, "Expected ')'")?;
 
-            if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
-                return self.error("Expected ')'");
+                    base = Expr::Call {
+                        base: Box::new(base),
+                        args,
+                    };
+                }
+                TokenKind::Dot => {
+                    self.advance()?;
+
+                    let member = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
+                        self.advance()?;
+                        name
+                    } else {
+                        return self.error("Expected member name after '.'");
+                    };
+
+                    base = Expr::MemberAccess {
+                        target: Box::new(base),
+                        member,
+                    }
+                }
+                _ => break,
             }
-
-            self.advance()?;
-
-            base = Expr::Call {
-                base: Box::new(base),
-                args,
-            };
         }
 
         Ok(base)
@@ -331,14 +413,23 @@ impl<'a> Parser<'a> {
                 self.advance()?;
                 Ok(Expr::Bool(false))
             }
-            TokenKind::Identifier(id) => {
-                if let Ok(path) = self.parse_path() {
+            TokenKind::Identifier(id) => match self.peek(1)?.kind {
+                TokenKind::DoubleColon => {
+                    let path = self.parse_path()?;
                     Ok(Expr::Path(path))
-                } else {
+                }
+                TokenKind::LBrace => {
+                    self.advance()?;
+                    self.advance()?;
+                    let fields = self.parse_comma_separated(|p| p.parse_instance_field())?;
+                    self.consume(TokenKind::RBrace, "Expected '}'")?;
+                    Ok(Expr::StateInstance { id, fields })
+                }
+                _ => {
                     self.advance()?;
                     Ok(Expr::Identifier(id))
                 }
-            }
+            },
             TokenKind::LParen => {
                 self.advance()?;
 
@@ -374,6 +465,44 @@ impl<'a> Parser<'a> {
 
                 self.advance()?;
                 Ok(Expr::Array(items))
+            }
+            TokenKind::LBrace => {
+                let brace_line = self.peek(0)?.line;
+                let brace_col = self.peek(0)?.column;
+                let mut stmts = Vec::new();
+                self.advance()?;
+
+                while !matches!(self.peek(0)?.kind, TokenKind::EOF) {
+                    if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
+                        self.advance()?;
+                        break;
+                    }
+                    stmts.push(self.parse_statement()?);
+                }
+
+                if matches!(self.peek(0)?.kind, TokenKind::EOF) {
+                    return self.loc_error(brace_line, brace_col, "Unterminated block");
+                }
+
+                Ok(Expr::Block(stmts))
+            }
+            TokenKind::Return => {
+                self.advance()?;
+
+                let expr = self.parse_expr()?;
+                if !self.is_brace_terminated(&expr) {
+                    self.consume(TokenKind::Semicolon, "Expected ';'")?;
+                }
+
+                Ok(Expr::Return(Box::new(expr)))
+            }
+            TokenKind::Break => {
+                self.advance()?;
+                Ok(Expr::Break)
+            }
+            TokenKind::Continue => {
+                self.advance()?;
+                Ok(Expr::Continue)
             }
             _ => {
                 return self.error("Invalid expression");

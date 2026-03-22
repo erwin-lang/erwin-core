@@ -2,100 +2,54 @@ pub(crate) enum Statement<'a> {
     Import {
         path: Vec<&'a str>,
     },
-    VarDeclare {
+    Var {
         visibility: Visibility,
         kind: VarKind,
-        identifier: &'a str,
+        id: &'a str,
         ty: Option<Type<'a>>,
         value: Expr<'a>,
-    },
-    NodeDeclare {
-        visibility: Visibility,
-        identifier: &'a str,
-        ty: Option<Type<'a>>,
-        value: Expr<'a>,
-        body: Vec<Statement<'a>>,
     },
     Func {
         visibility: Visibility,
-        identifier: &'a str,
+        id: &'a str,
         params: Vec<Param<'a>>,
-        return_ty: Type<'a>,
-        body: Vec<Statement<'a>>,
+        ty: Type<'a>,
+        body: Expr<'a>,
     },
-    For {
-        iter: &'a str,
-        start: Expr<'a>,
-        end: Expr<'a>,
-        step: Option<Expr<'a>>,
-        body: Vec<Statement<'a>>,
-        else_body: Option<Else<'a>>,
+    State {
+        visibility: Visibility,
+        id: &'a str,
+        fields: Vec<Field<'a>>,
     },
-    While {
-        condition: Expr<'a>,
-        body: Vec<Statement<'a>>,
-        else_body: Option<Else<'a>>,
+    Method {
+        id: &'a str,
+        methods: Expr<'a>,
     },
-    If {
-        condition: Expr<'a>,
-        then_body: Vec<Statement<'a>>,
-        else_body: Option<Else<'a>>,
-    },
-    Return {
-        value: Expr<'a>,
-    },
-    Break,
-    Continue,
-    Obj {
-        identifier: &'a str,
-        body: Vec<Field<'a>>,
+    Enum {
+        visibility: Visibility,
+        id: &'a str,
+        variants: Vec<Variant<'a>>,
     },
     Expr(Expr<'a>),
 }
 
-pub enum VarKind {
+pub(crate) enum VarKind {
     Const,
     Var,
+    Node,
 }
 
-pub enum Visibility {
+pub(crate) enum Visibility {
     Pub,
     Priv,
 }
 
-pub enum Else<'a> {
-    Else(Vec<Statement<'a>>),
-    ElseIf {
-        condition: Expr<'a>,
-        then_body: Vec<Statement<'a>>,
-        else_body: Option<Box<Else<'a>>>,
-    },
-    ElseWhile {
-        condition: Expr<'a>,
-        then_body: Vec<Statement<'a>>,
-        else_body: Option<Box<Else<'a>>>,
-    },
-    ElseFor {
-        iter: &'a str,
-        start: Expr<'a>,
-        end: Expr<'a>,
-        step: Option<Expr<'a>>,
-        then_body: Vec<Statement<'a>>,
-        else_body: Option<Box<Else<'a>>>,
-    },
+pub(crate) struct Param<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) ty: Type<'a>,
 }
 
-pub struct Param<'a> {
-    pub identifier: &'a str,
-    pub ty: Type<'a>,
-}
-
-pub struct Field<'a> {
-    pub identifier: &'a str,
-    pub ty: Type<'a>,
-}
-
-pub enum Type<'a> {
+pub(crate) enum Type<'a> {
     Bool,
     Integer {
         size: IntSize,
@@ -113,10 +67,11 @@ pub enum Type<'a> {
         params: Vec<Type<'a>>,
         return_ty: Box<Type<'a>>,
     },
-    Custom(&'a str),
+    Node(Box<Type<'a>>),
+    Custom(Vec<&'a str>),
 }
 
-pub enum IntSize {
+pub(crate) enum IntSize {
     B8,
     B16,
     B32,
@@ -124,49 +79,98 @@ pub enum IntSize {
     B128,
 }
 
-pub enum Sign {
+pub(crate) enum Sign {
     Signed,
     Unsigned,
 }
 
-pub enum FloatSize {
+pub(crate) enum FloatSize {
     B32,
     B64,
 }
 
-pub enum Expr<'a> {
+pub(crate) struct Field<'a> {
+    pub(crate) visibility: Visibility,
+    pub(crate) id: &'a str,
+    pub(crate) ty: Type<'a>,
+}
+
+pub(crate) struct InstanceField<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) value: Expr<'a>,
+}
+
+pub(crate) struct Variant<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) data: Vec<Type<'a>>,
+}
+
+pub(crate) enum Expr<'a> {
     Number(&'a str),
     String(&'a str),
     Bool(bool),
     Identifier(&'a str),
     Path(Vec<&'a str>),
+    MemberAccess {
+        target: Box<Expr<'a>>,
+        member: &'a str,
+    },
     Tuple(Vec<Expr<'a>>),
     Array(Vec<Expr<'a>>),
+    Block(Vec<Statement<'a>>),
+    Return(Box<Expr<'a>>),
+    Break,
+    Continue,
+    StateInstance {
+        id: &'a str,
+        fields: Vec<InstanceField<'a>>,
+    },
+
     Call {
         base: Box<Expr<'a>>,
         args: Vec<Expr<'a>>,
     },
+
     Unary {
         op: UnaryOp,
         right: Box<Expr<'a>>,
     },
+
     Binary {
         left: Box<Expr<'a>>,
         op: BinaryOp,
         right: Box<Expr<'a>>,
     },
+
+    For {
+        iter: Box<Expr<'a>>,
+        range: Box<Expr<'a>>,
+        do_body: Box<Expr<'a>>,
+        else_body: Option<Box<Expr<'a>>>,
+    },
+    While {
+        condition: Box<Expr<'a>>,
+        do_body: Box<Expr<'a>>,
+        else_body: Option<Box<Expr<'a>>>,
+    },
+    If {
+        condition: Box<Expr<'a>>,
+        do_body: Box<Expr<'a>>,
+        else_body: Option<Box<Expr<'a>>>,
+    },
+
     Lambda {
         params: Vec<&'a str>,
         body: Box<Expr<'a>>,
     },
 }
 
-pub enum UnaryOp {
+pub(crate) enum UnaryOp {
     Not,
     Minus,
 }
 
-pub enum BinaryOp {
+pub(crate) enum BinaryOp {
     Pow,
 
     Mult,

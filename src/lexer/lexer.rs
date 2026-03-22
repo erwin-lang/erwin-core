@@ -15,10 +15,10 @@ impl<'a> Lexer<'a> {
                 '=' => {
                     self.tokenize_double_symbol(Some(TokenKind::Assign), &[('=', TokenKind::Equal)])
                 }
-                ':' => {
-                    self.advance();
-                    Ok(Token::new(TokenKind::Colon, self.line, self.column))
-                }
+                ':' => self.tokenize_double_symbol(
+                    Some(TokenKind::Colon),
+                    &[(':', TokenKind::DoubleColon)],
+                ),
                 '!' => self.tokenize_double_symbol(
                     Some(TokenKind::Not),
                     &[
@@ -121,14 +121,17 @@ impl<'a> Lexer<'a> {
             "var" => TokenKind::Var,
             "node" => TokenKind::Node,
             "const" => TokenKind::Const,
-            "obj" => TokenKind::Obj,
+            "state" => TokenKind::State,
+            "method" => TokenKind::Method,
             "func" => TokenKind::Func,
             "return" => TokenKind::Return,
             "for" => TokenKind::For,
+            "in" => TokenKind::In,
             "while" => TokenKind::While,
             "continue" => TokenKind::Continue,
             "break" => TokenKind::Break,
             "if" => TokenKind::If,
+            "do" => TokenKind::Do,
             "else" => TokenKind::Else,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
@@ -148,7 +151,7 @@ impl<'a> Lexer<'a> {
             "Float32" => TokenKind::Float32,
             "Float64" => TokenKind::Float64,
             "Str" => TokenKind::String,
-            "Ptr" => TokenKind::Pointer,
+            "Byte" => TokenKind::Byte,
             _ => TokenKind::Identifier(identifier),
         };
 

@@ -19,15 +19,19 @@ pub(crate) enum TokenKind<'a> {
     Var,      // Variable definition
     Node,     // Node variable definition
     Const,    // Constant variable definition
-    Obj,      // Object definition for data storage
+    State,    // Object state definition block
+    Enum,     // Sum type definition block
+    Method,   // Method implementation block
     Func,     // Function definition
     Return,   // Exit function with return value
     For,      // For loop
+    In,       // For loop range
     While,    // While loop
     Continue, // Proceed to next iteration in loop
     Break,    // Break out of loop
     If,       // If block
-    Else,     // Else block
+    Do,       // Used in control flow to indicate main expression
+    Else,     // Used in control flow to indicate fallback expression
     True,     // Boolean true
     False,    // Boolean false
     Pub,      // Public visibility modifier
@@ -48,7 +52,6 @@ pub(crate) enum TokenKind<'a> {
     Float32,
     Float64,
     String,
-    Pointer,
     Byte,
 
     // Values
@@ -76,16 +79,17 @@ pub(crate) enum TokenKind<'a> {
     Xnor, // !^
 
     // Delimiters
-    LParen,    // (
-    RParen,    // )
-    LSquare,   // [
-    RSquare,   // ]
-    LBrace,    // {
-    RBrace,    // }
-    Semicolon, // ;
-    Colon,     // :
-    Comma,     // ,
-    Dot,       // .
+    LParen,      // (
+    RParen,      // )
+    LSquare,     // [
+    RSquare,     // ]
+    LBrace,      // {
+    RBrace,      // }
+    Semicolon,   // ;
+    Colon,       // :
+    DoubleColon, // ::
+    Comma,       // ,
+    Dot,         // .
 
     // Symbols
     Plus,   // +
