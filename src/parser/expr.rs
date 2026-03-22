@@ -1,8 +1,8 @@
 use crate::{
     error::Error,
     parser::Parser,
-    syntax::{
-        ast::{BinaryOp, Expr, UnaryOp},
+    structure::{
+        ast::{BinaryOp, Expr, ExprKind, UnaryOp},
         token::TokenKind,
     },
 };
@@ -14,7 +14,7 @@ impl<'a> Parser<'a> {
 
     fn parse_lambda(&mut self) -> Result<Expr<'a>, Error> {
         let start_line = self.peek(0)?.line;
-        let start_col = self.peek(0)?.column;
+        let start_col = self.peek(0)?.col;
         let expr = self.parse_control()?;
 
         if matches!(self.peek(0)?.kind, TokenKind::RArrow) {
@@ -22,13 +22,13 @@ impl<'a> Parser<'a> {
 
             let body = self.parse_lambda()?;
 
-            let params = match expr {
-                Expr::Identifier(name) => vec![name],
-                Expr::Tuple(items) => {
+            let params = match expr.kind {
+                ExprKind::Identifier(name) => vec![name],
+                ExprKind::Tuple(items) => {
                     let mut names = Vec::new();
 
                     for item in items {
-                        if let Expr::Identifier(name) = item {
+                        if let ExprKind::Identifier(name) = item.kind {
                             names.push(name);
                         } else {
                             return self.loc_error(
@@ -50,9 +50,15 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            return Ok(Expr::Lambda {
+            let kind = ExprKind::Lambda {
                 params,
                 body: Box::new(body),
+            };
+
+            return Ok(Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             });
         }
 
@@ -60,6 +66,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_control(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         match self.peek(0)?.kind {
             TokenKind::If => {
                 self.advance()?;
@@ -74,10 +83,16 @@ impl<'a> Parser<'a> {
                     else_body = Some(Box::new(self.parse_expr()?));
                 }
 
-                Ok(Expr::If {
+                let kind = ExprKind::If {
                     condition,
                     do_body,
                     else_body,
+                };
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
                 })
             }
             TokenKind::For => {
@@ -96,11 +111,17 @@ impl<'a> Parser<'a> {
                     else_body = Some(Box::new(self.parse_expr()?));
                 }
 
-                Ok(Expr::For {
+                let kind = ExprKind::For {
                     iter,
                     range,
                     do_body,
                     else_body,
+                };
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
                 })
             }
             TokenKind::While => {
@@ -116,10 +137,16 @@ impl<'a> Parser<'a> {
                     else_body = Some(Box::new(self.parse_expr()?));
                 }
 
-                Ok(Expr::While {
+                let kind = ExprKind::While {
                     condition,
                     do_body,
                     else_body,
+                };
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
                 })
             }
             _ => self.parse_pipe(),
@@ -127,39 +154,35 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_pipe(&mut self) -> Result<Expr<'a>, Error> {
-        let left = self.parse_or_nor()?;
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
 
-        match self.peek(0)?.kind {
-            TokenKind::LPipe => {
-                self.advance()?;
-                let right = self.parse_pipe()?;
+        let mut left = self.parse_or_nor()?;
 
-                Ok(Expr::Binary {
-                    left: Box::new(left),
-                    op: BinaryOp::LPipe,
-                    right: Box::new(right),
-                })
-            }
-            TokenKind::RPipe => {
-                let mut expr = left;
-                while matches!(self.peek(0)?.kind, TokenKind::RPipe) {
-                    self.advance()?;
-                    let right = self.parse_or_nor()?;
+        while matches!(self.peek(0)?.kind, TokenKind::RPipe) {
+            self.advance()?;
+            let right = self.parse_or_nor()?;
 
-                    expr = Expr::Binary {
-                        left: Box::new(expr),
-                        op: BinaryOp::RPipe,
-                        right: Box::new(right),
-                    };
-                }
+            let kind = ExprKind::Binary {
+                left: Box::new(left),
+                op: BinaryOp::RPipe,
+                right: Box::new(right),
+            };
 
-                Ok(expr)
-            }
-            _ => Ok(left),
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
+            };
         }
+
+        Ok(left)
     }
 
     fn parse_or_nor(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut left = self.parse_xor_xnor()?;
 
         while matches!(self.peek(0)?.kind, TokenKind::Or | TokenKind::Nor) {
@@ -171,10 +194,16 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_xor_xnor()?;
-            left = Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
                 right: Box::new(right),
+            };
+
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             };
         }
 
@@ -182,6 +211,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_xor_xnor(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut left = self.parse_and_nand()?;
 
         while matches!(self.peek(0)?.kind, TokenKind::Xor | TokenKind::Xnor) {
@@ -193,10 +225,16 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_and_nand()?;
-            left = Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
                 right: Box::new(right),
+            };
+
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             };
         }
 
@@ -204,6 +242,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_and_nand(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut left = self.parse_eq()?;
 
         while matches!(self.peek(0)?.kind, TokenKind::And | TokenKind::Nand) {
@@ -215,10 +256,16 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_eq()?;
-            left = Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
                 right: Box::new(right),
+            };
+
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             };
         }
 
@@ -226,6 +273,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_eq(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut left = self.parse_cmp()?;
 
         while matches!(self.peek(0)?.kind, TokenKind::Equal | TokenKind::NotEqual) {
@@ -237,10 +287,16 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_cmp()?;
-            left = Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
                 right: Box::new(right),
+            };
+
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             };
         }
 
@@ -248,6 +304,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_cmp(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut left = self.parse_add_sub()?;
 
         while matches!(
@@ -267,10 +326,16 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_add_sub()?;
-            left = Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
                 right: Box::new(right),
+            };
+
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             };
         }
 
@@ -278,6 +343,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_add_sub(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut left = self.parse_mult_div()?;
 
         while matches!(self.peek(0)?.kind, TokenKind::Plus | TokenKind::Minus) {
@@ -289,10 +357,16 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_mult_div()?;
-            left = Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
                 right: Box::new(right),
+            };
+
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             };
         }
 
@@ -300,6 +374,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_mult_div(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut left = self.parse_pow()?;
 
         while matches!(self.peek(0)?.kind, TokenKind::Star | TokenKind::Slash) {
@@ -311,10 +388,16 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_pow()?;
-            left = Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
                 right: Box::new(right),
+            };
+
+            left = Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             };
         }
 
@@ -322,16 +405,25 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_pow(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let left = self.parse_unary()?;
 
         if matches!(self.peek(0)?.kind, TokenKind::Pow) {
             self.advance()?;
             let right = self.parse_pow()?;
 
-            return Ok(Expr::Binary {
+            let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op: BinaryOp::Pow,
                 right: Box::new(right),
+            };
+
+            return Ok(Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             });
         };
 
@@ -339,6 +431,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_unary(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         if matches!(self.peek(0)?.kind, TokenKind::Not | TokenKind::Minus) {
             let op = match self.peek(0)?.kind {
                 TokenKind::Not => UnaryOp::Not,
@@ -348,9 +443,15 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
             let right = self.parse_unary()?;
-            return Ok(Expr::Unary {
+            let kind = ExprKind::Unary {
                 op,
                 right: Box::new(right),
+            };
+
+            return Ok(Expr {
+                kind,
+                line: start_line,
+                col: start_col,
             });
         }
 
@@ -358,6 +459,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_postfix(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         let mut base = self.parse_primary()?;
 
         loop {
@@ -368,9 +472,15 @@ impl<'a> Parser<'a> {
                     let args = self.parse_comma_separated(|parser| parser.parse_expr())?;
                     self.consume(TokenKind::RParen, "Expected ')'")?;
 
-                    base = Expr::Call {
+                    let kind = ExprKind::Call {
                         base: Box::new(base),
                         args,
+                    };
+
+                    base = Expr {
+                        kind,
+                        line: start_line,
+                        col: start_col,
                     };
                 }
                 TokenKind::Dot => {
@@ -383,10 +493,16 @@ impl<'a> Parser<'a> {
                         return self.error("Expected member name after '.'");
                     };
 
-                    base = Expr::MemberAccess {
+                    let kind = ExprKind::MemberAccess {
                         target: Box::new(base),
                         member,
-                    }
+                    };
+
+                    base = Expr {
+                        kind,
+                        line: start_line,
+                        col: start_col,
+                    };
                 }
                 _ => break,
             }
@@ -396,38 +512,83 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_primary(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         match self.peek(0)?.kind {
             TokenKind::Number(num) => {
                 self.advance()?;
-                Ok(Expr::Number(num))
+                let kind = ExprKind::Number(num);
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::StringLiteral(s) => {
                 self.advance()?;
-                Ok(Expr::String(s))
+                let kind = ExprKind::String(s);
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::True => {
                 self.advance()?;
-                Ok(Expr::Bool(true))
+                let kind = ExprKind::Bool(true);
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::False => {
                 self.advance()?;
-                Ok(Expr::Bool(false))
+                let kind = ExprKind::Bool(false);
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::Identifier(id) => match self.peek(1)?.kind {
                 TokenKind::DoubleColon => {
                     let path = self.parse_path()?;
-                    Ok(Expr::Path(path))
+                    let kind = ExprKind::Path(path);
+
+                    Ok(Expr {
+                        kind,
+                        line: start_line,
+                        col: start_col,
+                    })
                 }
                 TokenKind::LBrace => {
                     self.advance()?;
                     self.advance()?;
                     let fields = self.parse_comma_separated(|p| p.parse_instance_field())?;
                     self.consume(TokenKind::RBrace, "Expected '}'")?;
-                    Ok(Expr::StateInstance { id, fields })
+                    let kind = ExprKind::StateInstance { id, fields };
+
+                    Ok(Expr {
+                        kind,
+                        line: start_line,
+                        col: start_col,
+                    })
                 }
                 _ => {
                     self.advance()?;
-                    Ok(Expr::Identifier(id))
+                    let kind = ExprKind::Identifier(id);
+
+                    Ok(Expr {
+                        kind,
+                        line: start_line,
+                        col: start_col,
+                    })
                 }
             },
             TokenKind::LParen => {
@@ -440,17 +601,16 @@ impl<'a> Parser<'a> {
 
                     let mut items = vec![first_expr];
                     items.extend(self.parse_comma_separated(|p| p.parse_expr())?);
+                    self.consume(TokenKind::RParen, "Expected ')'")?;
+                    let kind = ExprKind::Tuple(items);
 
-                    if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
-                        return self.error("Expected ')'");
-                    }
-
-                    Ok(Expr::Tuple(items))
+                    Ok(Expr {
+                        kind,
+                        line: start_line,
+                        col: start_col,
+                    })
                 } else {
-                    if !matches!(self.peek(0)?.kind, TokenKind::RParen) {
-                        return self.error("Expected ')'");
-                    }
-
+                    self.consume(TokenKind::RParen, "Expected ')'")?;
                     Ok(first_expr)
                 }
             }
@@ -458,17 +618,18 @@ impl<'a> Parser<'a> {
                 self.advance()?;
 
                 let items = self.parse_comma_separated(|p| p.parse_expr())?;
+                self.consume(TokenKind::RSquare, "Expected ']'")?;
+                let kind = ExprKind::Array(items);
 
-                if !matches!(self.peek(0)?.kind, TokenKind::RSquare) {
-                    return self.error("Expected ']'");
-                }
-
-                self.advance()?;
-                Ok(Expr::Array(items))
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::LBrace => {
                 let brace_line = self.peek(0)?.line;
-                let brace_col = self.peek(0)?.column;
+                let brace_col = self.peek(0)?.col;
                 let mut stmts = Vec::new();
                 self.advance()?;
 
@@ -484,7 +645,13 @@ impl<'a> Parser<'a> {
                     return self.loc_error(brace_line, brace_col, "Unterminated block");
                 }
 
-                Ok(Expr::Block(stmts))
+                let kind = ExprKind::Block(stmts);
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::Return => {
                 self.advance()?;
@@ -494,15 +661,33 @@ impl<'a> Parser<'a> {
                     self.consume(TokenKind::Semicolon, "Expected ';'")?;
                 }
 
-                Ok(Expr::Return(Box::new(expr)))
+                let kind = ExprKind::Return(Box::new(expr));
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::Break => {
                 self.advance()?;
-                Ok(Expr::Break)
+                let kind = ExprKind::Break;
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             TokenKind::Continue => {
                 self.advance()?;
-                Ok(Expr::Continue)
+                let kind = ExprKind::Continue;
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
             }
             _ => {
                 return self.error("Invalid expression");

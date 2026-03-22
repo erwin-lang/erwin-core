@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
     lexer::Lexer,
-    syntax::token::{Token, TokenKind},
+    structure::token::{Token, TokenKind},
 };
 
 impl<'a> Lexer<'a> {
@@ -122,6 +122,7 @@ impl<'a> Lexer<'a> {
             "node" => TokenKind::Node,
             "const" => TokenKind::Const,
             "state" => TokenKind::State,
+            "enum" => TokenKind::Enum,
             "method" => TokenKind::Method,
             "func" => TokenKind::Func,
             "return" => TokenKind::Return,

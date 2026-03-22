@@ -1,8 +1,8 @@
 use crate::{
     error::Error,
     parser::Parser,
-    syntax::{
-        ast::{Expr, Statement, VarKind, Visibility},
+    structure::{
+        ast::{ExprKind, Statement, StatementKind, VarKind, Visibility},
         token::TokenKind,
     },
 };
@@ -24,11 +24,20 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_import(&mut self) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         self.advance()?;
         let path = self.parse_path()?;
-        self.consume(TokenKind::Semicolon, "Expected ';'");
+        self.consume(TokenKind::Semicolon, "Expected ';'")?;
 
-        Ok(Statement::Import { path })
+        let kind = StatementKind::Import { path };
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
+        })
     }
 
     pub(super) fn parse_var(
@@ -36,6 +45,9 @@ impl<'a> Parser<'a> {
         kind: VarKind,
         visibility: Visibility,
     ) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         self.advance()?;
 
         let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
@@ -55,20 +67,29 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::Assign, "Expected '='")?;
         let value = self.parse_expr()?;
 
-        if !matches!(value, Expr::Block(_)) {
+        if !matches!(value.kind, ExprKind::Block(_)) {
             self.consume(TokenKind::Semicolon, "Expected ';'")?;
         }
 
-        Ok(Statement::Var {
+        let kind = StatementKind::Var {
             visibility,
             kind,
             id,
             ty,
             value,
+        };
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
         })
     }
 
     pub(super) fn parse_func(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         self.advance()?;
 
         let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
@@ -88,10 +109,10 @@ impl<'a> Parser<'a> {
         let ty = self.parse_type()?;
 
         let body_line = self.peek(0)?.line;
-        let body_col = self.peek(0)?.column;
+        let body_col = self.peek(0)?.col;
         let body = self.parse_expr()?;
 
-        if !matches!(body, Expr::Block(_)) {
+        if !matches!(body.kind, ExprKind::Block(_)) {
             return self.loc_error(
                 body_line,
                 body_col,
@@ -99,16 +120,25 @@ impl<'a> Parser<'a> {
             );
         }
 
-        Ok(Statement::Func {
+        let kind = StatementKind::Func {
             visibility,
             id,
             params,
             ty,
             body,
+        };
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
         })
     }
 
     pub(super) fn parse_state(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         self.advance()?;
 
         let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
@@ -122,14 +152,23 @@ impl<'a> Parser<'a> {
         let fields = self.parse_comma_separated(|p| p.parse_field())?;
         self.consume(TokenKind::RBrace, "Expected '}'")?;
 
-        Ok(Statement::State {
+        let kind = StatementKind::State {
             visibility,
             id,
             fields,
+        };
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
         })
     }
 
     pub(super) fn parse_enum(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         self.advance()?;
 
         let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
@@ -143,14 +182,23 @@ impl<'a> Parser<'a> {
         let variants = self.parse_comma_separated(|p| p.parse_variant())?;
         self.consume(TokenKind::RBrace, "Expected '}'")?;
 
-        Ok(Statement::Enum {
+        let kind = StatementKind::Enum {
             visibility,
             id,
             variants,
+        };
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
         })
     }
 
     pub(super) fn parse_method(&mut self) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
         self.advance()?;
 
         let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
@@ -161,14 +209,14 @@ impl<'a> Parser<'a> {
         };
 
         let methods_line = self.peek(0)?.line;
-        let methods_col = self.peek(0)?.column;
+        let methods_col = self.peek(0)?.col;
         let methods = self.parse_expr()?;
 
-        if let Expr::Block(stmts) = &methods {
+        if let ExprKind::Block(stmts) = &methods.kind {
             for stmt in stmts {
                 if !matches!(
-                    stmt,
-                    Statement::Func {
+                    stmt.kind,
+                    StatementKind::Func {
                         visibility: _,
                         id: _,
                         params: _,
@@ -191,43 +239,59 @@ impl<'a> Parser<'a> {
             );
         }
 
-        Ok(Statement::Method { id, methods })
+        let kind = StatementKind::Method { id, methods };
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
+        })
     }
 
     pub(super) fn parse_statement_expr(&mut self) -> Result<Statement<'a>, Error> {
-        let expr_line = self.peek(0)?.line;
-        let expr_col = self.peek(0)?.column;
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
         let expr = self.parse_expr()?;
 
         if matches!(
-            expr,
-            Expr::Block(_)
-                | Expr::For {
+            expr.kind,
+            ExprKind::Block(_)
+                | ExprKind::For {
                     iter: _,
                     range: _,
                     do_body: _,
                     else_body: _
                 }
-                | Expr::While {
+                | ExprKind::While {
                     condition: _,
                     do_body: _,
                     else_body: _
                 }
-                | Expr::If {
+                | ExprKind::If {
                     condition: _,
                     do_body: _,
                     else_body: _
                 }
-                | Expr::Call { base: _, args: _ }
+                | ExprKind::Call { base: _, args: _ }
         ) {
             if !self.is_brace_terminated(&expr) {
                 self.consume(TokenKind::Semicolon, "Expected ';'")?;
             }
         } else {
-            return self.loc_error(expr_line, expr_col, "This expression cannot be a statement");
+            return self.loc_error(
+                start_line,
+                start_col,
+                "This expression cannot be a statement",
+            );
         }
 
-        Ok(Statement::Expr(expr))
+        let kind = StatementKind::Expr(expr);
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
+        })
     }
 
     pub(super) fn parse_visibility(&mut self) -> Result<Statement<'a>, Error> {

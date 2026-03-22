@@ -1,9 +1,9 @@
 use crate::{
     error::Error,
     parser::Parser,
-    syntax::{
-        ast::{FloatSize, IntSize, Sign, Type},
+    structure::{
         token::TokenKind,
+        types::{FloatSize, IntSize, Sign, Type},
     },
 };
 
@@ -124,7 +124,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
 
         let mut types = self.parse_comma_separated(|p| p.parse_type())?;
-        self.consume(TokenKind::RParen, "Expected ')'");
+        self.consume(TokenKind::RParen, "Expected ')'")?;
 
         match types.len() {
             1 => Ok(types.remove(0)),
@@ -141,7 +141,7 @@ impl<'a> Parser<'a> {
 
         let ty = Box::new(self.parse_type()?);
 
-        self.consume(TokenKind::RSquare, "Expected ']'");
+        self.consume(TokenKind::RSquare, "Expected ']'")?;
 
         Ok(Type::Array(ty))
     }

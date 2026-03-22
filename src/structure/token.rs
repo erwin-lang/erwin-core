@@ -2,12 +2,16 @@
 pub(crate) struct Token<'a> {
     pub(crate) kind: TokenKind<'a>,
     pub(crate) line: usize,
-    pub(crate) column: usize,
+    pub(crate) col: usize,
 }
 
 impl<'a> Token<'a> {
     pub(crate) fn new(kind: TokenKind<'a>, line: usize, column: usize) -> Self {
-        Self { kind, line, column }
+        Self {
+            kind,
+            line,
+            col: column,
+        }
     }
 }
 

@@ -1,6 +1,8 @@
 use crate::error::Error;
-use crate::syntax::ast::{Expr, Field, InstanceField, Param, Statement, Variant, Visibility};
-use crate::syntax::token::{Token, TokenKind};
+use crate::structure::ast::{
+    Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility,
+};
+use crate::structure::token::{Token, TokenKind};
 
 pub(crate) mod expr;
 pub(crate) mod statement;
@@ -148,18 +150,18 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn is_brace_terminated(&self, expr: &Expr<'a>) -> bool {
-        match expr {
-            Expr::If {
+        match &expr.kind {
+            ExprKind::If {
                 condition: _,
                 do_body,
                 else_body,
             }
-            | Expr::While {
+            | ExprKind::While {
                 condition: _,
                 do_body,
                 else_body,
             }
-            | Expr::For {
+            | ExprKind::For {
                 iter: _,
                 range: _,
                 do_body,
@@ -171,7 +173,7 @@ impl<'a> Parser<'a> {
                     self.is_brace_terminated(do_body)
                 }
             }
-            Expr::Block(_) => true,
+            ExprKind::Block(_) => true,
             _ => false,
         }
     }
@@ -208,7 +210,7 @@ impl<'a> Parser<'a> {
 
     pub(super) fn error<T>(&self, msg: &str) -> Result<T, Error> {
         let token = self.peek(0)?;
-        self.loc_error(token.line, token.column, msg)
+        self.loc_error(token.line, token.col, msg)
     }
 
     pub(super) fn loc_error<T>(&self, line: usize, col: usize, msg: &str) -> Result<T, Error> {

@@ -1,4 +1,18 @@
-pub(crate) enum Statement<'a> {
+use crate::structure::types::Type;
+
+pub(crate) struct Statement<'a> {
+    pub(crate) kind: StatementKind<'a>,
+    pub(crate) line: usize,
+    pub(crate) col: usize,
+}
+
+pub(crate) struct Expr<'a> {
+    pub(crate) kind: ExprKind<'a>,
+    pub(crate) line: usize,
+    pub(crate) col: usize,
+}
+
+pub(crate) enum StatementKind<'a> {
     Import {
         path: Vec<&'a str>,
     },
@@ -49,46 +63,6 @@ pub(crate) struct Param<'a> {
     pub(crate) ty: Type<'a>,
 }
 
-pub(crate) enum Type<'a> {
-    Bool,
-    Integer {
-        size: IntSize,
-        sign: Sign,
-    },
-    Float {
-        size: FloatSize,
-    },
-    String,
-    Pointer(Box<Type<'a>>),
-    Tuple(Vec<Type<'a>>),
-    Array(Box<Type<'a>>),
-    Byte,
-    Function {
-        params: Vec<Type<'a>>,
-        return_ty: Box<Type<'a>>,
-    },
-    Node(Box<Type<'a>>),
-    Custom(Vec<&'a str>),
-}
-
-pub(crate) enum IntSize {
-    B8,
-    B16,
-    B32,
-    B64,
-    B128,
-}
-
-pub(crate) enum Sign {
-    Signed,
-    Unsigned,
-}
-
-pub(crate) enum FloatSize {
-    B32,
-    B64,
-}
-
 pub(crate) struct Field<'a> {
     pub(crate) visibility: Visibility,
     pub(crate) id: &'a str,
@@ -105,7 +79,7 @@ pub(crate) struct Variant<'a> {
     pub(crate) data: Vec<Type<'a>>,
 }
 
-pub(crate) enum Expr<'a> {
+pub(crate) enum ExprKind<'a> {
     Number(&'a str),
     String(&'a str),
     Bool(bool),
