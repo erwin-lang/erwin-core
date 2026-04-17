@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-pub enum Error {
+pub(crate) enum Error {
     Custom(String),
     Io(std::io::Error),
 }

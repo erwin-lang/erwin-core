@@ -21,13 +21,14 @@ pub(crate) enum TokenKind<'a> {
 
     // Keywords
     Var,      // Variable definition
-    Node,     // Node variable definition
     Const,    // Constant variable definition
+    Node,     // Node definition
     State,    // Object state definition block
     Enum,     // Sum type definition block
     Method,   // Method implementation block
     Func,     // Function definition
     Return,   // Exit function with return value
+    Yield,    // Yield a value from the local scope
     For,      // For loop
     In,       // For loop range
     While,    // While loop
@@ -48,15 +49,24 @@ pub(crate) enum TokenKind<'a> {
     Int32,
     Int64,
     Int128,
-    Uint8,
-    Uint16,
-    Uint32,
-    Uint64,
-    Uint128,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    UInt128,
+    IntRange8,
+    IntRange16,
+    IntRange32,
+    IntRange64,
+    IntRange128,
+    UIntRange8,
+    UIntRange16,
+    UIntRange32,
+    UIntRange64,
+    UIntRange128,
     Float32,
     Float64,
     String,
-    Byte,
 
     // Values
     Number(&'a str),
@@ -96,15 +106,16 @@ pub(crate) enum TokenKind<'a> {
     Dot,         // .
 
     // Symbols
-    Plus,   // +
-    Minus,  // -
-    Star,   // *
-    Slash,  // /
-    Pow,    // ^
-    LPipe,  // <|
-    RPipe,  // |>
-    LArrow, // <-
-    RArrow, // ->
+    At,        // @
+    Amp,       // &
+    Plus,      // +
+    Minus,     // -
+    Star,      // *
+    Slash,     // /
+    Pow,       // ^
+    RPipe,     // |>
+    RArrow,    // ->
+    DoubleDot, // ..
 
-    EOF, // End of file
+    Eof, // End of file
 }

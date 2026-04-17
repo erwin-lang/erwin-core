@@ -11,7 +11,11 @@ impl<'a> Lexer<'a> {
                 'a'..='z' | 'A'..='Z' | '_' => self.tokenize_identifier(),
                 '0'..='9' => self.tokenize_number(),
                 '"' => self.tokenize_string(),
-                '@' => self.tokenize_raw_string(),
+                '#' => self.tokenize_raw_string(),
+                '@' => {
+                    self.advance();
+                    Ok(Token::new(TokenKind::At, self.line, self.column))
+                }
                 '=' => {
                     self.tokenize_double_symbol(Some(TokenKind::Assign), &[('=', TokenKind::Equal)])
                 }
@@ -30,11 +34,7 @@ impl<'a> Lexer<'a> {
                 ),
                 '<' => self.tokenize_double_symbol(
                     Some(TokenKind::LessThan),
-                    &[
-                        ('=', TokenKind::LessEqual),
-                        ('|', TokenKind::LPipe),
-                        ('-', TokenKind::LArrow),
-                    ],
+                    &[('=', TokenKind::LessEqual)],
                 ),
                 '>' => self.tokenize_double_symbol(
                     Some(TokenKind::GreaterThan),
@@ -42,7 +42,7 @@ impl<'a> Lexer<'a> {
                 ),
                 '|' => self
                     .tokenize_double_symbol(None, &[('|', TokenKind::Or), ('>', TokenKind::RPipe)]),
-                '&' => self.tokenize_double_symbol(None, &[('&', TokenKind::And)]),
+                '&' => self.tokenize_double_symbol(Some(TokenKind::Amp), &[('&', TokenKind::And)]),
                 '^' => self.tokenize_double_symbol(Some(TokenKind::Pow), &[('^', TokenKind::Xor)]),
                 '(' => {
                     self.advance();
@@ -76,10 +76,8 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Ok(Token::new(TokenKind::Comma, self.line, self.column))
                 }
-                '.' => {
-                    self.advance();
-                    Ok(Token::new(TokenKind::Dot, self.line, self.column))
-                }
+                '.' => self
+                    .tokenize_double_symbol(Some(TokenKind::Dot), &[('.', TokenKind::DoubleDot)]),
                 '+' => {
                     self.advance();
                     Ok(Token::new(TokenKind::Plus, self.line, self.column))
@@ -95,18 +93,16 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Ok(Token::new(TokenKind::Slash, self.line, self.column))
                 }
-                _ => {
-                    return Err(Error::Custom(format!(
-                        "[{}, {}] Unexpected token",
-                        self.line, self.column
-                    )));
-                }
+                _ => Err(Error::Custom(format!(
+                    "[{}, {}] Unexpected token",
+                    self.line, self.column
+                ))),
             },
             None => Err(Error::Custom("Unexpected end of file".to_string())),
         }
     }
 
-    fn tokenize_identifier(&mut self) -> Result<Token<'a>, Error> {
+    pub(super) fn tokenize_identifier(&mut self) -> Result<Token<'a>, Error> {
         let start_index = self.current;
         while let Some(char) = self.peek() {
             if char.is_alphanumeric() || char == '_' {
@@ -126,6 +122,7 @@ impl<'a> Lexer<'a> {
             "method" => TokenKind::Method,
             "func" => TokenKind::Func,
             "return" => TokenKind::Return,
+            "yield" => TokenKind::Yield,
             "for" => TokenKind::For,
             "in" => TokenKind::In,
             "while" => TokenKind::While,
@@ -144,22 +141,31 @@ impl<'a> Lexer<'a> {
             "Int32" => TokenKind::Int32,
             "Int64" => TokenKind::Int64,
             "Int128" => TokenKind::Int128,
-            "Uint8" => TokenKind::Uint8,
-            "Uint16" => TokenKind::Uint16,
-            "Uint32" => TokenKind::Uint32,
-            "Uint64" => TokenKind::Uint64,
-            "Uint128" => TokenKind::Uint128,
+            "UInt8" => TokenKind::UInt8,
+            "UInt16" => TokenKind::UInt16,
+            "UInt32" => TokenKind::UInt32,
+            "UInt64" => TokenKind::UInt64,
+            "UInt128" => TokenKind::UInt128,
+            "Range8" => TokenKind::IntRange8,
+            "Range16" => TokenKind::IntRange16,
+            "Range32" => TokenKind::IntRange32,
+            "Range64" => TokenKind::IntRange64,
+            "Range128" => TokenKind::IntRange128,
+            "URange8" => TokenKind::UIntRange8,
+            "URange16" => TokenKind::UIntRange16,
+            "URange32" => TokenKind::UIntRange32,
+            "URange64" => TokenKind::UIntRange64,
+            "URange128" => TokenKind::UIntRange128,
             "Float32" => TokenKind::Float32,
             "Float64" => TokenKind::Float64,
             "Str" => TokenKind::String,
-            "Byte" => TokenKind::Byte,
             _ => TokenKind::Identifier(identifier),
         };
 
         Ok(Token::new(kind, self.line, self.column))
     }
 
-    fn tokenize_number(&mut self) -> Result<Token<'a>, Error> {
+    pub(super) fn tokenize_number(&mut self) -> Result<Token<'a>, Error> {
         let start_line = self.line;
         let start_col = self.column;
         let start_index = self.current;
@@ -190,7 +196,7 @@ impl<'a> Lexer<'a> {
         ))
     }
 
-    fn tokenize_string(&mut self) -> Result<Token<'a>, Error> {
+    pub(super) fn tokenize_string(&mut self) -> Result<Token<'a>, Error> {
         let start_line = self.line;
         let start_col = self.column;
 
@@ -203,7 +209,7 @@ impl<'a> Lexer<'a> {
                 '"' => break,
                 '\\' => {
                     self.advance();
-                    if let None = self.peek() {
+                    if self.peek().is_none() {
                         break;
                     }
                     self.advance();
@@ -229,7 +235,7 @@ impl<'a> Lexer<'a> {
         ))
     }
 
-    fn tokenize_raw_string(&mut self) -> Result<Token<'a>, Error> {
+    pub(super) fn tokenize_raw_string(&mut self) -> Result<Token<'a>, Error> {
         let start_line = self.line;
         let start_col = self.column;
 
@@ -261,7 +267,7 @@ impl<'a> Lexer<'a> {
         ))
     }
 
-    fn tokenize_double_symbol(
+    pub(super) fn tokenize_double_symbol(
         &mut self,
         fallback: Option<TokenKind<'a>>,
         matches: &[(char, TokenKind<'a>)],

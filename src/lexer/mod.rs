@@ -1,4 +1,4 @@
-pub(crate) mod lexer;
+pub(super) mod chars;
 
 use crate::{
     error::Error,
@@ -6,10 +6,10 @@ use crate::{
 };
 
 pub(crate) struct Lexer<'a> {
-    code: &'a str,
-    current: usize,
-    line: usize,
-    column: usize,
+    pub(super) code: &'a str,
+    pub(super) current: usize,
+    pub(super) line: usize,
+    pub(super) column: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -22,7 +22,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub(crate) fn tokenize(&mut self) -> Result<Vec<Token<'a>>, Error> {
+    pub(crate) fn tokenize(mut self) -> Result<Vec<Token<'a>>, Error> {
         let mut tokens = Vec::new();
 
         while !self.is_at_end() {
@@ -41,7 +41,7 @@ impl<'a> Lexer<'a> {
             tokens.push(self.tokenize_chars()?);
         }
 
-        tokens.push(Token::new(TokenKind::EOF, self.line, self.column));
+        tokens.push(Token::new(TokenKind::Eof, self.line, self.column));
         Ok(tokens)
     }
 

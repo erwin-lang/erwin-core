@@ -97,10 +97,14 @@ impl<'a> Parser<'a> {
             }
             TokenKind::For => {
                 self.advance()?;
-                let iter = Box::new(self.parse_expr()?);
+                let elem = if let ExprKind::Identifier(id) = self.parse_expr()?.kind {
+                    id
+                } else {
+                    return self.error("Expected identifier");
+                };
 
                 self.consume(TokenKind::In, "Expected 'in'")?;
-                let range = Box::new(self.parse_expr()?);
+                let iter = Box::new(self.parse_expr()?);
 
                 self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
@@ -112,8 +116,8 @@ impl<'a> Parser<'a> {
                 }
 
                 let kind = ExprKind::For {
+                    elem,
                     iter,
-                    range,
                     do_body,
                     else_body,
                 };
@@ -307,7 +311,7 @@ impl<'a> Parser<'a> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
-        let mut left = self.parse_add_sub()?;
+        let mut left = self.parse_range()?;
 
         while matches!(
             self.peek(0)?.kind,
@@ -325,7 +329,7 @@ impl<'a> Parser<'a> {
             };
 
             self.advance()?;
-            let right = self.parse_add_sub()?;
+            let right = self.parse_range()?;
             let kind = ExprKind::Binary {
                 left: Box::new(left),
                 op,
@@ -337,6 +341,30 @@ impl<'a> Parser<'a> {
                 line: start_line,
                 col: start_col,
             };
+        }
+
+        Ok(left)
+    }
+
+    fn parse_range(&mut self) -> Result<Expr<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
+        let left = self.parse_add_sub()?;
+
+        if matches!(self.peek(0)?.kind, TokenKind::DoubleDot) {
+            self.advance()?;
+            let right = self.parse_add_sub()?;
+
+            return Ok(Expr {
+                kind: ExprKind::Binary {
+                    left: Box::new(left),
+                    op: BinaryOp::Range,
+                    right: Box::new(right),
+                },
+                line: start_line,
+                col: start_col,
+            });
         }
 
         Ok(left)
@@ -434,10 +462,15 @@ impl<'a> Parser<'a> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
-        if matches!(self.peek(0)?.kind, TokenKind::Not | TokenKind::Minus) {
+        if matches!(
+            self.peek(0)?.kind,
+            TokenKind::Not | TokenKind::Minus | TokenKind::Amp | TokenKind::Star
+        ) {
             let op = match self.peek(0)?.kind {
                 TokenKind::Not => UnaryOp::Not,
                 TokenKind::Minus => UnaryOp::Minus,
+                TokenKind::Amp => UnaryOp::Ref,
+                TokenKind::Star => UnaryOp::Deref,
                 _ => unreachable!(),
             };
 
@@ -504,6 +537,27 @@ impl<'a> Parser<'a> {
                         col: start_col,
                     };
                 }
+                TokenKind::DoubleColon => {
+                    self.advance()?;
+
+                    let member = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
+                        self.advance()?;
+                        name
+                    } else {
+                        return self.error("Expected static entry name after '::'");
+                    };
+
+                    let kind = ExprKind::StaticAccess {
+                        target: Box::new(base),
+                        member,
+                    };
+
+                    base = Expr {
+                        kind,
+                        line: start_line,
+                        col: start_col,
+                    };
+                }
                 _ => break,
             }
         }
@@ -557,16 +611,6 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::Identifier(id) => match self.peek(1)?.kind {
-                TokenKind::DoubleColon => {
-                    let path = self.parse_path()?;
-                    let kind = ExprKind::Path(path);
-
-                    Ok(Expr {
-                        kind,
-                        line: start_line,
-                        col: start_col,
-                    })
-                }
                 TokenKind::LBrace => {
                     self.advance()?;
                     self.advance()?;
@@ -633,7 +677,7 @@ impl<'a> Parser<'a> {
                 let mut stmts = Vec::new();
                 self.advance()?;
 
-                while !matches!(self.peek(0)?.kind, TokenKind::EOF) {
+                while !matches!(self.peek(0)?.kind, TokenKind::Eof) {
                     if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
                         self.advance()?;
                         break;
@@ -641,7 +685,7 @@ impl<'a> Parser<'a> {
                     stmts.push(self.parse_statement()?);
                 }
 
-                if matches!(self.peek(0)?.kind, TokenKind::EOF) {
+                if matches!(self.peek(0)?.kind, TokenKind::Eof) {
                     return self.loc_error(brace_line, brace_col, "Unterminated block");
                 }
 
@@ -669,6 +713,22 @@ impl<'a> Parser<'a> {
                     col: start_col,
                 })
             }
+            TokenKind::Yield => {
+                self.advance()?;
+
+                let expr = self.parse_expr()?;
+                if !self.is_brace_terminated(&expr) {
+                    self.consume(TokenKind::Semicolon, "Expected ';'")?;
+                }
+
+                let kind = ExprKind::Yield(Box::new(expr));
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
+            }
             TokenKind::Break => {
                 self.advance()?;
                 let kind = ExprKind::Break;
@@ -689,9 +749,7 @@ impl<'a> Parser<'a> {
                     col: start_col,
                 })
             }
-            _ => {
-                return self.error("Invalid expression");
-            }
+            _ => self.error("Invalid expression"),
         }
     }
 }

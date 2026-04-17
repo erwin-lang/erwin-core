@@ -1,16 +1,18 @@
-use crate::error::Error;
-use crate::structure::ast::{
-    Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility,
-};
-use crate::structure::token::{Token, TokenKind};
+pub(super) mod expr;
+pub(super) mod statement;
+pub(super) mod types;
 
-pub(crate) mod expr;
-pub(crate) mod statement;
-pub(crate) mod types;
+use crate::{
+    error::Error,
+    structure::{
+        ast::{Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility},
+        token::{Token, TokenKind},
+    },
+};
 
 pub(crate) struct Parser<'a> {
-    tokens: Vec<Token<'a>>,
-    current: usize,
+    pub(super) tokens: Vec<Token<'a>>,
+    pub(super) current: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -18,10 +20,10 @@ impl<'a> Parser<'a> {
         Self { tokens, current: 0 }
     }
 
-    pub(crate) fn parse(&mut self) -> Result<Vec<Statement<'a>>, Error> {
+    pub(crate) fn parse(mut self) -> Result<Vec<Statement<'a>>, Error> {
         let mut program = Vec::new();
 
-        while !matches!(self.peek(0)?.kind, TokenKind::EOF) {
+        while !matches!(self.peek(0)?.kind, TokenKind::Eof) {
             program.push(self.parse_statement()?);
         }
 
@@ -162,8 +164,8 @@ impl<'a> Parser<'a> {
                 else_body,
             }
             | ExprKind::For {
+                elem: _,
                 iter: _,
-                range: _,
                 do_body,
                 else_body,
             } => {
@@ -200,8 +202,8 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub(super) fn consume(&mut self, token: TokenKind, err: &str) -> Result<(), Error> {
-        if !matches!(self.peek(0)?.kind, token) {
+    pub(super) fn consume(&mut self, _token: TokenKind, err: &str) -> Result<(), Error> {
+        if !matches!(self.peek(0)?.kind, _token) {
             return self.error(err);
         }
 

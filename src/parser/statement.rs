@@ -4,6 +4,7 @@ use crate::{
     structure::{
         ast::{ExprKind, Statement, StatementKind, VarKind, Visibility},
         token::TokenKind,
+        types::Type,
     },
 };
 
@@ -13,8 +14,8 @@ impl<'a> Parser<'a> {
             TokenKind::Pub => self.parse_visibility(),
             TokenKind::Import => self.parse_import(),
             TokenKind::Var => self.parse_var(VarKind::Var, Visibility::Priv),
+            TokenKind::Node => self.parse_node(Visibility::Priv),
             TokenKind::Const => self.parse_var(VarKind::Const, Visibility::Priv),
-            TokenKind::Node => self.parse_var(VarKind::Node, Visibility::Priv),
             TokenKind::Func => self.parse_func(Visibility::Priv),
             TokenKind::State => self.parse_state(Visibility::Priv),
             TokenKind::Enum => self.parse_enum(Visibility::Priv),
@@ -23,15 +24,26 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(super) fn parse_import(&mut self) -> Result<Statement<'a>, Error> {
+    fn parse_import(&mut self) -> Result<Statement<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
         self.advance()?;
+
+        let alias = if let TokenKind::Identifier(name) = self.peek(0)?.kind
+            && matches!(self.peek(1)?.kind, TokenKind::Assign)
+        {
+            self.advance()?;
+            self.consume(TokenKind::Assign, "Expected '='")?;
+            Some(name)
+        } else {
+            None
+        };
+
         let path = self.parse_path()?;
         self.consume(TokenKind::Semicolon, "Expected ';'")?;
 
-        let kind = StatementKind::Import { path };
+        let kind = StatementKind::Import { alias, path };
 
         Ok(Statement {
             kind,
@@ -40,11 +52,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub(super) fn parse_var(
-        &mut self,
-        kind: VarKind,
-        visibility: Visibility,
-    ) -> Result<Statement<'a>, Error> {
+    fn parse_var(&mut self, kind: VarKind, visibility: Visibility) -> Result<Statement<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
@@ -86,7 +94,43 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub(super) fn parse_func(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+    fn parse_node(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
+        self.advance()?;
+
+        let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
+            self.advance()?;
+            name
+        } else {
+            return self.error("Expected node name");
+        };
+
+        self.consume(TokenKind::Colon, "Expected ':'")?;
+        let ty = self.parse_type()?;
+        self.consume(TokenKind::Assign, "Expected '='")?;
+        let value = self.parse_expr()?;
+
+        if !matches!(value.kind, ExprKind::Block(_)) {
+            self.consume(TokenKind::Semicolon, "Expected ';'")?;
+        }
+
+        let kind = StatementKind::Node {
+            visibility,
+            id,
+            ty,
+            value,
+        };
+
+        Ok(Statement {
+            kind,
+            line: start_line,
+            col: start_col,
+        })
+    }
+
+    fn parse_func(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
@@ -106,7 +150,10 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::RParen, "Expected ')'")?;
         self.consume(TokenKind::RArrow, "Expected '->'")?;
 
-        let ty = self.parse_type()?;
+        let ty = Type::Function {
+            params: params.iter().map(|p| p.ty.clone()).collect(),
+            return_ty: Box::new(self.parse_type()?),
+        };
 
         let body_line = self.peek(0)?.line;
         let body_col = self.peek(0)?.col;
@@ -135,7 +182,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub(super) fn parse_state(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+    fn parse_state(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
@@ -165,7 +212,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub(super) fn parse_enum(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+    fn parse_enum(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
@@ -195,7 +242,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub(super) fn parse_method(&mut self) -> Result<Statement<'a>, Error> {
+    fn parse_method(&mut self) -> Result<Statement<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
 
@@ -214,16 +261,7 @@ impl<'a> Parser<'a> {
 
         if let ExprKind::Block(stmts) = &methods.kind {
             for stmt in stmts {
-                if !matches!(
-                    stmt.kind,
-                    StatementKind::Func {
-                        visibility: _,
-                        id: _,
-                        params: _,
-                        ty: _,
-                        body: _
-                    }
-                ) {
+                if !matches!(stmt.kind, StatementKind::Func { .. }) {
                     return self.loc_error(
                         methods_line,
                         methods_col,
@@ -248,41 +286,31 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub(super) fn parse_statement_expr(&mut self) -> Result<Statement<'a>, Error> {
+    fn parse_statement_expr(&mut self) -> Result<Statement<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
         let expr = self.parse_expr()?;
 
-        if matches!(
+        if !matches!(
             expr.kind,
             ExprKind::Block(_)
-                | ExprKind::For {
-                    iter: _,
-                    range: _,
-                    do_body: _,
-                    else_body: _
-                }
-                | ExprKind::While {
-                    condition: _,
-                    do_body: _,
-                    else_body: _
-                }
-                | ExprKind::If {
-                    condition: _,
-                    do_body: _,
-                    else_body: _
-                }
-                | ExprKind::Call { base: _, args: _ }
+                | ExprKind::For { .. }
+                | ExprKind::While { .. }
+                | ExprKind::If { .. }
+                | ExprKind::Call { .. }
+                | ExprKind::Return(_)
+                | ExprKind::Break
+                | ExprKind::Continue
         ) {
-            if !self.is_brace_terminated(&expr) {
-                self.consume(TokenKind::Semicolon, "Expected ';'")?;
-            }
-        } else {
             return self.loc_error(
                 start_line,
                 start_col,
                 "This expression cannot be a statement",
             );
+        }
+
+        if !self.is_brace_terminated(&expr) {
+            self.consume(TokenKind::Semicolon, "Expected ';'")?;
         }
 
         let kind = StatementKind::Expr(expr);
@@ -294,12 +322,12 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub(super) fn parse_visibility(&mut self) -> Result<Statement<'a>, Error> {
+    fn parse_visibility(&mut self) -> Result<Statement<'a>, Error> {
         self.advance()?;
         match self.peek(0)?.kind {
             TokenKind::Var => self.parse_var(VarKind::Var, Visibility::Pub),
+            TokenKind::Node => self.parse_node(Visibility::Pub),
             TokenKind::Const => self.parse_var(VarKind::Const, Visibility::Pub),
-            TokenKind::Node => self.parse_var(VarKind::Node, Visibility::Pub),
             TokenKind::Func => self.parse_func(Visibility::Pub),
             TokenKind::State => self.parse_state(Visibility::Pub),
             TokenKind::Pub => self.error("Repeated visibility modifier"),

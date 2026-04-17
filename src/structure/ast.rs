@@ -1,19 +1,23 @@
 use crate::structure::types::Type;
 
+#[derive(Clone)]
 pub(crate) struct Statement<'a> {
     pub(crate) kind: StatementKind<'a>,
     pub(crate) line: usize,
     pub(crate) col: usize,
 }
 
+#[derive(Clone)]
 pub(crate) struct Expr<'a> {
     pub(crate) kind: ExprKind<'a>,
     pub(crate) line: usize,
     pub(crate) col: usize,
 }
 
+#[derive(Clone)]
 pub(crate) enum StatementKind<'a> {
     Import {
+        alias: Option<&'a str>,
         path: Vec<&'a str>,
     },
     Var {
@@ -21,6 +25,12 @@ pub(crate) enum StatementKind<'a> {
         kind: VarKind,
         id: &'a str,
         ty: Option<Type<'a>>,
+        value: Expr<'a>,
+    },
+    Node {
+        visibility: Visibility,
+        id: &'a str,
+        ty: Type<'a>,
         value: Expr<'a>,
     },
     Func {
@@ -47,44 +57,53 @@ pub(crate) enum StatementKind<'a> {
     Expr(Expr<'a>),
 }
 
+#[derive(Clone)]
 pub(crate) enum VarKind {
     Const,
     Var,
-    Node,
 }
 
+#[derive(Clone)]
 pub(crate) enum Visibility {
     Pub,
     Priv,
 }
 
+#[derive(Clone)]
 pub(crate) struct Param<'a> {
     pub(crate) id: &'a str,
     pub(crate) ty: Type<'a>,
 }
 
+#[derive(Clone)]
 pub(crate) struct Field<'a> {
     pub(crate) visibility: Visibility,
     pub(crate) id: &'a str,
     pub(crate) ty: Type<'a>,
 }
 
+#[derive(Clone)]
 pub(crate) struct InstanceField<'a> {
     pub(crate) id: &'a str,
     pub(crate) value: Expr<'a>,
 }
 
+#[derive(Clone)]
 pub(crate) struct Variant<'a> {
     pub(crate) id: &'a str,
     pub(crate) data: Vec<Type<'a>>,
 }
 
+#[derive(Clone)]
 pub(crate) enum ExprKind<'a> {
     Number(&'a str),
     String(&'a str),
     Bool(bool),
     Identifier(&'a str),
-    Path(Vec<&'a str>),
+    StaticAccess {
+        target: Box<Expr<'a>>,
+        member: &'a str,
+    },
     MemberAccess {
         target: Box<Expr<'a>>,
         member: &'a str,
@@ -93,6 +112,7 @@ pub(crate) enum ExprKind<'a> {
     Array(Vec<Expr<'a>>),
     Block(Vec<Statement<'a>>),
     Return(Box<Expr<'a>>),
+    Yield(Box<Expr<'a>>),
     Break,
     Continue,
     StateInstance {
@@ -117,8 +137,8 @@ pub(crate) enum ExprKind<'a> {
     },
 
     For {
+        elem: &'a str,
         iter: Box<Expr<'a>>,
-        range: Box<Expr<'a>>,
         do_body: Box<Expr<'a>>,
         else_body: Option<Box<Expr<'a>>>,
     },
@@ -139,11 +159,15 @@ pub(crate) enum ExprKind<'a> {
     },
 }
 
+#[derive(Clone)]
 pub(crate) enum UnaryOp {
     Not,
     Minus,
+    Ref,
+    Deref,
 }
 
+#[derive(Clone)]
 pub(crate) enum BinaryOp {
     Pow,
 
@@ -152,6 +176,8 @@ pub(crate) enum BinaryOp {
 
     Add,
     Sub,
+
+    Range,
 
     LessThan,
     GreaterThan,
@@ -170,6 +196,5 @@ pub(crate) enum BinaryOp {
     Or,
     Nor,
 
-    LPipe,
     RPipe,
 }
