@@ -348,11 +348,7 @@ impl<'a> Checker<'a> {
             return true;
         }
 
-        if matches!(explicit, Type::Universal) {
-            return true;
-        }
-
-        if matches!(inferred, Type::Null) {
+        if matches!(inferred, Type::Unknown) {
             return true;
         }
 
@@ -393,12 +389,12 @@ impl<'a> Checker<'a> {
             return Ok(a.clone());
         }
 
-        if matches!(a, Type::Null) {
+        if matches!(a, Type::Unknown) {
             return Ok(b.clone());
-        } else if matches!(b, Type::Null) {
+        } else if matches!(b, Type::Unknown) {
             return Ok(a.clone());
-        } else if matches!(a, Type::Universal) || matches!(b, Type::Universal) {
-            return Ok(Type::Universal);
+        } else if matches!(a, Type::Done) || matches!(b, Type::Done) {
+            return Ok(Type::Done);
         } else if self.is_assignable(a, b) {
             return Ok(b.clone());
         } else if self.is_assignable(b, a) {

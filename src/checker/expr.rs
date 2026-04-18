@@ -5,7 +5,8 @@ use crate::{
     error::Error,
     structure::{
         ast::{
-            BinaryOp, Expr, ExprKind, InstanceField, Statement, StatementKind, UnaryOp, Visibility,
+            BinaryOp, Expr, ExprKind, InstanceField, Param, Statement, StatementKind, UnaryOp,
+            Visibility,
         },
         symbols::ScopedSymbol,
         types::{FloatSize, IntSize, Sign, Type},
@@ -22,10 +23,15 @@ impl<'a> Checker<'a> {
             ExprKind::Number(num) => self.check_number(expr, num, Sign::Unsigned),
             ExprKind::String(_) => Ok(Type::String),
             ExprKind::Bool(_) => Ok(Type::Bool),
-            ExprKind::Break => Ok(Type::Null),
-            ExprKind::Continue => Ok(Type::Null),
+            ExprKind::Break => Ok(Type::Done),
+            ExprKind::Continue => Ok(Type::Done),
             ExprKind::Return(ret) => self.check_return(stmt, ret),
-            ExprKind::Yield(ret) => self.check_yield(stmt, ret),
+            ExprKind::Yield(_) => self.loc_error(
+                expr.line,
+                expr.col,
+                "Statement/scope blocks cannot yield values, only blocks used in expressions can"
+                    .to_string(),
+            ),
             ExprKind::Identifier(id) => self.check_identifier(expr, id),
             ExprKind::MemberAccess { target, member } => {
                 self.check_member_access(stmt, target, member)
@@ -132,17 +138,7 @@ impl<'a> Checker<'a> {
         let ty = self.check_expr(stmt, ret)?;
         self.returns.push(ty);
 
-        Ok(Type::Null)
-    }
-
-    fn check_yield(
-        &mut self,
-        stmt: &'a Statement<'a>,
-        ret: &'a Expr<'a>,
-    ) -> Result<Type<'a>, Error> {
-        let ty = self.check_expr(stmt, ret)?;
-
-        Ok(ty)
+        Ok(Type::Done)
     }
 
     fn check_identifier(&self, expr: &Expr<'a>, id: &'a str) -> Result<Type<'a>, Error> {
@@ -227,6 +223,12 @@ impl<'a> Checker<'a> {
         member: &str,
     ) -> Result<Type<'a>, Error> {
         let target_ty = self.check_expr(stmt, target)?;
+
+        if let Type::Module(path) = target_ty {
+            let symbol = self.resolve_external(member, path, target.line, target.col)?;
+            return Ok(symbol.ty.clone());
+        }
+
         let registry_id = target_ty.as_str();
 
         if let ExprKind::Identifier(id) = target.kind
@@ -283,7 +285,7 @@ impl<'a> Checker<'a> {
         elems: &'a Vec<Expr<'a>>,
     ) -> Result<Type<'a>, Error> {
         if elems.is_empty() {
-            return Ok(Type::Array(Box::new(Type::Null)));
+            return Ok(Type::Array(Box::new(Type::Unknown)));
         }
 
         let first_ty = self.check_expr(stmt, &elems[0])?;
@@ -314,21 +316,22 @@ impl<'a> Checker<'a> {
         self.enter_scope();
         let mut block_ty = Type::Unit;
 
-        for stmt in stmts {
+        for (i, stmt) in stmts.iter().enumerate() {
             self.check_global_statements(stmt)?;
             self.check_statement(stmt)?;
 
             if let StatementKind::Expr(e) = &stmt.kind {
                 let expr_ty = self.check_expr(stmt, e)?;
 
-                if matches!(expr_ty, Type::Null) {
-                    block_ty = Type::Null;
+                if matches!(expr_ty, Type::Done) {
+                    block_ty = Type::Done;
                     break;
                 }
 
-                if matches!(e.kind, ExprKind::Yield(_)) {
-                    block_ty = expr_ty;
-                    break;
+                if i == stmts.len() - 1
+                    && let ExprKind::Yield(y) = &e.kind
+                {
+                    block_ty = self.check_expr(stmt, y)?;
                 }
             }
         }
@@ -674,7 +677,7 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &'a Statement<'a>,
         expr: &Expr<'a>,
-        params: &'a Vec<&str>,
+        params: &'a Vec<Param<'a>>,
         body: &'a Expr<'a>,
     ) -> Result<Type<'a>, Error> {
         self.enter_scope();
@@ -682,9 +685,9 @@ impl<'a> Checker<'a> {
 
         for param in params {
             self.define(
-                param,
+                param.id,
                 ScopedSymbol {
-                    ty: Type::Null,
+                    ty: param.ty.clone(),
                     visibility: &Visibility::Priv,
                     is_static_member: false,
                 },
@@ -695,15 +698,22 @@ impl<'a> Checker<'a> {
 
         let body_ty = self.check_expr(stmt, body)?;
         let returns = take(&mut self.returns);
-        let mut ty = Type::Null;
+        let mut ty = if matches!(body_ty, Type::Done) {
+            Type::Unknown
+        } else {
+            body_ty
+        };
 
         for ret_ty in &returns {
-            ty = self.join_ty(ret_ty, &ty, expr.line, expr.col)?;
+            ty = self.join_ty(&ty, ret_ty, expr.line, expr.col)?;
         }
 
         self.returns = parent_returns;
         self.exit_local_scope(expr.line, expr.col)?;
 
-        Ok(ty)
+        Ok(Type::Function {
+            params: params.iter().map(|p| p.ty.clone()).collect(),
+            return_ty: Box::new(ty),
+        })
     }
 }

@@ -15,54 +15,43 @@ impl<'a> Parser<'a> {
     fn parse_lambda(&mut self) -> Result<Expr<'a>, Error> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
-        let expr = self.parse_control()?;
 
-        if matches!(self.peek(0)?.kind, TokenKind::RArrow) {
-            self.advance()?;
+        if !matches!(self.peek(0)?.kind, TokenKind::LParen) {
+            return self.parse_control();
+        }
 
+        let mut i = 1;
+        let mut depth = 1;
+
+        while depth > 0 {
+            match self.peek(i)?.kind {
+                TokenKind::LParen => depth += 1,
+                TokenKind::RParen => depth -= 1,
+                TokenKind::Eof => break,
+                _ => {}
+            }
+
+            i += 1;
+        }
+
+        if matches!(self.peek(i)?.kind, TokenKind::RArrow) {
+            self.consume(TokenKind::LParen, "Expected '('")?;
+            let params = self.parse_comma_separated(|p| p.parse_param())?;
+            self.consume(TokenKind::RParen, "Expected ')'")?;
+            self.consume(TokenKind::RArrow, "Expected '->'")?;
             let body = self.parse_lambda()?;
 
-            let params = match expr.kind {
-                ExprKind::Identifier(name) => vec![name],
-                ExprKind::Tuple(items) => {
-                    let mut names = Vec::new();
-
-                    for item in items {
-                        if let ExprKind::Identifier(name) = item.kind {
-                            names.push(name);
-                        } else {
-                            return self.loc_error(
-                                start_line,
-                                start_col,
-                                "Lambda parameters must be simple identifiers",
-                            );
-                        }
-                    }
-
-                    names
-                }
-                _ => {
-                    return self.loc_error(
-                        start_line,
-                        start_col,
-                        "Invalid lambda function parameter syntax",
-                    );
-                }
-            };
-
-            let kind = ExprKind::Lambda {
-                params,
-                body: Box::new(body),
-            };
-
             return Ok(Expr {
-                kind,
+                kind: ExprKind::Lambda {
+                    params,
+                    body: Box::new(body),
+                },
                 line: start_line,
                 col: start_col,
             });
         }
 
-        Ok(expr)
+        self.parse_control()
     }
 
     fn parse_control(&mut self) -> Result<Expr<'a>, Error> {
@@ -706,22 +695,6 @@ impl<'a> Parser<'a> {
                 }
 
                 let kind = ExprKind::Return(Box::new(expr));
-
-                Ok(Expr {
-                    kind,
-                    line: start_line,
-                    col: start_col,
-                })
-            }
-            TokenKind::Yield => {
-                self.advance()?;
-
-                let expr = self.parse_expr()?;
-                if !self.is_brace_terminated(&expr) {
-                    self.consume(TokenKind::Semicolon, "Expected ';'")?;
-                }
-
-                let kind = ExprKind::Yield(Box::new(expr));
 
                 Ok(Expr {
                     kind,

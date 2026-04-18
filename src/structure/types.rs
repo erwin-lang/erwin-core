@@ -29,9 +29,9 @@ pub(crate) enum Type<'a> {
 
     // Special builtin types
     Module(&'a Path),
-    Universal, // Universal type
-    Unit,      // Single value
-    Null,      // Null type
+    Unknown, // Promotable type | is_assignable(_, Unknown) = true | join_ty(Unknown, _) = _
+    Unit,    // Single value
+    Done,    // Control flow type | join_ty(Done, _) = Done
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, PartialOrd)]
@@ -146,15 +146,15 @@ impl<'a> Type<'a> {
                 size: FloatSize::B64,
             },
             "Str" => Type::String,
-            "Ptr" => Type::Pointer(Box::new(Type::Universal)),
-            "Ref" => Type::Ref(Box::new(Type::Universal)),
+            "Ptr" => Type::Pointer(Box::new(Type::Unknown)),
+            "Ref" => Type::Ref(Box::new(Type::Unknown)),
             "Tuple" => Type::Tuple(Vec::new()),
-            "Array" => Type::Array(Box::new(Type::Universal)),
+            "Array" => Type::Array(Box::new(Type::Unknown)),
             "Func" => Type::Function {
                 params: Vec::new(),
-                return_ty: Box::new(Type::Universal),
+                return_ty: Box::new(Type::Unknown),
             },
-            "Node" => Type::Node(Box::new(Type::Universal)),
+            "Node" => Type::Node(Box::new(Type::Unknown)),
             _ => Type::Custom(value),
         }
     }

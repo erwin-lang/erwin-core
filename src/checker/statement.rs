@@ -276,6 +276,18 @@ impl<'a> Checker<'a> {
             val_ty
         };
 
+        if matches!(final_ty, Type::Unknown) {
+            return self.loc_error(stmt.line, stmt.col, format!("Cannot infer type for variable '{}', please provide an explicit type annotation", id));
+        }
+
+        if matches!(final_ty, Type::Done) {
+            return self.loc_error(
+                stmt.line,
+                stmt.col,
+                format!("Variable '{}' assigned to a termination signal", id),
+            );
+        }
+
         self.define(
             id,
             ScopedSymbol {
@@ -358,20 +370,23 @@ impl<'a> Checker<'a> {
 
         let body_ty = self.check_expr(stmt, body)?;
         let returns = take(&mut self.returns);
+        let mut final_ty = if matches!(body_ty, Type::Done) {
+            Type::Unknown
+        } else {
+            body_ty
+        };
 
         for ret_ty in &returns {
-            if !self.is_assignable(ty, ret_ty) {
-                return self.loc_error(stmt.line, stmt.col, format!("Function '{}' returns type {:?}, which is incompatible with declared type {:?}", id, ret_ty, ty));
-            }
+            final_ty = self.join_ty(&final_ty, ret_ty, stmt.line, stmt.col)?;
         }
 
-        if !matches!(body_ty, Type::Null) && !self.is_assignable(ty, &body_ty) {
+        if !self.is_assignable(ty, &final_ty) {
             return self.loc_error(
                 stmt.line,
                 stmt.col,
                 format!(
-                    "Function '{}' declared return type {:?} but body yields {:?}",
-                    id, ty, body_ty
+                    "Function '{}' expected type '{:?}' but it's body returned '{:?}'",
+                    id, ty, final_ty
                 ),
             );
         }

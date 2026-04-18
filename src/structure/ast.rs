@@ -1,20 +1,20 @@
 use crate::structure::types::Type;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Statement<'a> {
     pub(crate) kind: StatementKind<'a>,
     pub(crate) line: usize,
     pub(crate) col: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Expr<'a> {
     pub(crate) kind: ExprKind<'a>,
     pub(crate) line: usize,
     pub(crate) col: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum StatementKind<'a> {
     Import {
         alias: Option<&'a str>,
@@ -57,44 +57,44 @@ pub(crate) enum StatementKind<'a> {
     Expr(Expr<'a>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum VarKind {
     Const,
     Var,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum Visibility {
     Pub,
     Priv,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Param<'a> {
     pub(crate) id: &'a str,
     pub(crate) ty: Type<'a>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Field<'a> {
     pub(crate) visibility: Visibility,
     pub(crate) id: &'a str,
     pub(crate) ty: Type<'a>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct InstanceField<'a> {
     pub(crate) id: &'a str,
     pub(crate) value: Expr<'a>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Variant<'a> {
     pub(crate) id: &'a str,
     pub(crate) data: Vec<Type<'a>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum ExprKind<'a> {
     Number(&'a str),
     String(&'a str),
@@ -154,12 +154,12 @@ pub(crate) enum ExprKind<'a> {
     },
 
     Lambda {
-        params: Vec<&'a str>,
+        params: Vec<Param<'a>>,
         body: Box<Expr<'a>>,
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum UnaryOp {
     Not,
     Minus,
@@ -167,7 +167,7 @@ pub(crate) enum UnaryOp {
     Deref,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum BinaryOp {
     Pow,
 

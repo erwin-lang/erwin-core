@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     env::args,
-    fs::read_to_string,
+    fs::{read_to_string, write},
     path::{Path, PathBuf},
 };
 
@@ -71,7 +71,13 @@ fn main() -> Result<(), Error> {
     resolve_imports(main_path, &mut loaded_modules, &mut registry)?;
 
     let symbol_table = Checker::new(&registry, main_path).check()?;
-    // Then Assembler::new(...) here, when it's implemented
+
+    // TEST: let's save the AST tree and the symbol table to check them!
+    write("/home/canfro/ast.txt", format!("{:?}", registry))?;
+    write(
+        "/home/canfro/symbol_table.txt",
+        format!("{:?}", symbol_table),
+    )?;
 
     Ok(())
 }
