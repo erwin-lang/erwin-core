@@ -129,7 +129,6 @@ impl<'a> Lexer<'a> {
             "continue" => TokenKind::Continue,
             "break" => TokenKind::Break,
             "if" => TokenKind::If,
-            "do" => TokenKind::Do,
             "else" => TokenKind::Else,
             "true" => TokenKind::True,
             "false" => TokenKind::False,

@@ -183,22 +183,21 @@ impl<'a> Parser<'a> {
     pub(super) fn peek(&self, offset: isize) -> Result<&Token<'a>, Error> {
         let index = self.current as isize + offset;
 
-        if index < 0 || index as usize >= self.tokens.len() {
-            return Err(Error::Custom(
-                "Parser is already at the last token".to_string(),
-            ));
+        if index < 0 {
+            return Err(Error::Custom("Parser looked before start".to_string()));
+        }
+
+        if index as usize >= self.tokens.len() {
+            return Ok(&self.tokens[self.tokens.len() - 1]);
         }
 
         Ok(&self.tokens[index as usize])
     }
 
     pub(super) fn advance(&mut self) -> Result<(), Error> {
-        if self.current >= self.tokens.len() {
-            return Err(Error::Custom(
-                "Parser is already at the last token".to_string(),
-            ));
+        if self.current < self.tokens.len() - 1 {
+            self.current += 1;
         }
-        self.current += 1;
         Ok(())
     }
 

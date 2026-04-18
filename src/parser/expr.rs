@@ -62,8 +62,6 @@ impl<'a> Parser<'a> {
             TokenKind::If => {
                 self.advance()?;
                 let condition = Box::new(self.parse_expr()?);
-
-                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -94,8 +92,6 @@ impl<'a> Parser<'a> {
 
                 self.consume(TokenKind::In, "Expected 'in'")?;
                 let iter = Box::new(self.parse_expr()?);
-
-                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -120,8 +116,6 @@ impl<'a> Parser<'a> {
             TokenKind::While => {
                 self.advance()?;
                 let condition = Box::new(self.parse_expr()?);
-
-                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -666,17 +660,15 @@ impl<'a> Parser<'a> {
                 let mut stmts = Vec::new();
                 self.advance()?;
 
-                while !matches!(self.peek(0)?.kind, TokenKind::Eof) {
-                    if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
-                        self.advance()?;
-                        break;
-                    }
+                while !matches!(self.peek(0)?.kind, TokenKind::RBrace | TokenKind::Eof) {
                     stmts.push(self.parse_statement()?);
                 }
 
                 if matches!(self.peek(0)?.kind, TokenKind::Eof) {
                     return self.loc_error(brace_line, brace_col, "Unterminated block");
                 }
+
+                self.advance()?;
 
                 let kind = ExprKind::Block(stmts);
 
@@ -690,11 +682,19 @@ impl<'a> Parser<'a> {
                 self.advance()?;
 
                 let expr = self.parse_expr()?;
-                if !self.is_brace_terminated(&expr) {
-                    self.consume(TokenKind::Semicolon, "Expected ';'")?;
-                }
-
                 let kind = ExprKind::Return(Box::new(expr));
+
+                Ok(Expr {
+                    kind,
+                    line: start_line,
+                    col: start_col,
+                })
+            }
+            TokenKind::Yield => {
+                self.advance()?;
+
+                let expr = self.parse_expr()?;
+                let kind = ExprKind::Yield(Box::new(expr));
 
                 Ok(Expr {
                     kind,

@@ -1,0 +1,152 @@
+{
+    "/home/canfro/programming/erwin/test/prelude.erw": ModuleTable {
+        registry: {
+            "Int8": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Float64": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "URange32": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "UInt16": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Ptr": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Range8": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Node": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Int32": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "UInt32": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Int128": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Int64": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Range32": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Bool": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Range128": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Range64": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Int16": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "UInt8": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "UInt128": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "URange8": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "URange128": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "URange16": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Func": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "UInt64": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Array": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Float32": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Tuple": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "URange64": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Str": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Range16": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+            "Ref": StaticEntry {
+                visibility: Pub,
+                members: {},
+            },
+        },
+        symbols: Scope {
+            symbols: {},
+        },
+    },
+    "/home/canfro/programming/erwin/test/test.erw": ModuleTable {
+        registry: {},
+        symbols: Scope {
+            symbols: {
+                "f": ScopedSymbol {
+                    ty: Function {
+                        params: [
+                            Integer {
+                                size: B32,
+                                sign: Signed,
+                            },
+                        ],
+                        return_ty: Integer {
+                            size: B8,
+                            sign: Unsigned,
+                        },
+                    },
+                    visibility: Priv,
+                    is_static_member: true,
+                },
+            },
+        },
+    },
+}

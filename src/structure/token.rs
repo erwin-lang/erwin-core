@@ -35,7 +35,6 @@ pub(crate) enum TokenKind<'a> {
     Continue, // Proceed to next iteration in loop
     Break,    // Break out of loop
     If,       // If block
-    Do,       // Used in control flow to indicate main expression
     Else,     // Used in control flow to indicate fallback expression
     True,     // Boolean true
     False,    // Boolean false

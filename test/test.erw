@@ -1,7 +1,7 @@
 var f = (x: Int32) -> {
-    if x > 0 do {
-        return 10;
+    if x > 0 {
+        yield 10;
     }
 
-    return 20;
+    yield 20;
 }

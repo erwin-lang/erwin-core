@@ -102,11 +102,19 @@ impl<'a> Checker<'a> {
             );
         }
 
-        let mut target_path = self
-            .current_module
-            .parent()
-            .unwrap_or(Path::new("."))
-            .to_path_buf();
+        let mut target_path = match path.first() {
+            Some(elem) if *elem == "std" => self
+                .std_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .to_path_buf(),
+            Some(_) => self
+                .main_module
+                .parent()
+                .unwrap_or(Path::new("."))
+                .to_path_buf(),
+            None => unreachable!(),
+        };
 
         for part in path {
             target_path.push(part);
@@ -293,7 +301,7 @@ impl<'a> Checker<'a> {
             ScopedSymbol {
                 ty: final_ty,
                 visibility,
-                is_static_member: true,
+                is_static_member: false,
             },
             stmt.line,
             stmt.col,

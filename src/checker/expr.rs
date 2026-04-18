@@ -26,12 +26,7 @@ impl<'a> Checker<'a> {
             ExprKind::Break => Ok(Type::Done),
             ExprKind::Continue => Ok(Type::Done),
             ExprKind::Return(ret) => self.check_return(stmt, ret),
-            ExprKind::Yield(_) => self.loc_error(
-                expr.line,
-                expr.col,
-                "Statement/scope blocks cannot yield values, only blocks used in expressions can"
-                    .to_string(),
-            ),
+            ExprKind::Yield(_) => Ok(Type::Unknown),
             ExprKind::Identifier(id) => self.check_identifier(expr, id),
             ExprKind::MemberAccess { target, member } => {
                 self.check_member_access(stmt, target, member)
@@ -148,6 +143,13 @@ impl<'a> Checker<'a> {
 
         if self
             .resolve_static(id, self.current_module, expr.line, expr.col)
+            .is_ok()
+        {
+            return Ok(Type::from_str(id));
+        }
+
+        if self
+            .resolve_static(id, self.prelude_module, expr.line, expr.col)
             .is_ok()
         {
             return Ok(Type::from_str(id));

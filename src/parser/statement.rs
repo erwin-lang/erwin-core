@@ -301,6 +301,9 @@ impl<'a> Parser<'a> {
                 | ExprKind::Return(_)
                 | ExprKind::Break
                 | ExprKind::Continue
+                | ExprKind::Yield(_)
+                | ExprKind::StaticAccess { .. }
+                | ExprKind::MemberAccess { .. }
         ) {
             return self.loc_error(
                 start_line,

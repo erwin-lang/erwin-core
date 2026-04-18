@@ -17,6 +17,10 @@ use crate::{
 };
 
 pub(crate) struct Checker<'a> {
+    pub(super) std_path: &'a Path,
+    pub(super) prelude_module: &'a Path,
+    pub(super) main_module: &'a Path,
+
     pub(super) modules: &'a HashMap<PathBuf, Vec<Statement<'a>>>,
     pub(super) tables: HashMap<&'a Path, ModuleTable<'a>>,
     pub(super) current_module: &'a Path,
@@ -26,78 +30,50 @@ pub(crate) struct Checker<'a> {
 
 impl<'a> Checker<'a> {
     pub(crate) fn new(
-        registry: &'a HashMap<PathBuf, Vec<Statement<'a>>>,
-        main_mod: &'a Path,
+        std_path: &'a Path,
+        prelude_module: &'a Path,
+        main_module: &'a Path,
+        modules: &'a HashMap<PathBuf, Vec<Statement<'a>>>,
     ) -> Self {
         Self {
-            modules: registry,
+            std_path,
+            prelude_module,
+            main_module,
+
+            modules,
             tables: HashMap::new(),
-            current_module: main_mod,
+            current_module: main_module,
             current_scopes: Vec::new(),
             returns: Vec::new(),
         }
     }
 
     pub(crate) fn check(&mut self) -> Result<HashMap<&'a Path, ModuleTable<'a>>, Error> {
-        let primitives_id = vec![
-            "Bool",
-            "UInt8",
-            "UInt16",
-            "UInt32",
-            "UInt64",
-            "UInt128",
-            "Int8",
-            "Int16",
-            "Int32",
-            "Int64",
-            "Int128",
-            "URange8",
-            "URange16",
-            "URange32",
-            "URange64",
-            "URange128",
-            "Range8",
-            "Range16",
-            "Range32",
-            "Range64",
-            "Range128",
-            "Float32",
-            "Float64",
-            "Str",
-            "Ptr",
-            "Ref",
-            "Tuple",
-            "Array",
-            "Func",
-            "Node",
-        ];
-
-        for id in primitives_id {
-            self.define_static(
-                self.current_module,
-                id,
-                StaticEntry {
-                    visibility: &Visibility::Pub,
-                    members: HashMap::new(),
-                },
-                0,
-                0,
-            )?;
-        }
-
         self.check_module(self.current_module)?;
 
         Ok(take(&mut self.tables))
     }
 
     pub(super) fn check_module(&mut self, path: &'a Path) -> Result<(), Error> {
-        if self.tables.contains_key(path) {
+        if let Some(table) = self.tables.get(path)
+            && !table.symbols.symbols.is_empty()
+        {
             return Ok(());
         }
 
         let stmts = self.modules.get(path).ok_or_else(|| {
             Error::Custom(format!("Module {} not found in registry", path.display()))
         })?;
+
+        self.tables.insert(
+            path,
+            ModuleTable {
+                registry: HashMap::new(),
+                symbols: Scope {
+                    symbols: HashMap::new(),
+                },
+            },
+        );
 
         let old_module = self.current_module;
         self.current_module = path;
