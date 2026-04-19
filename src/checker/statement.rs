@@ -441,13 +441,18 @@ impl<'a> Checker<'a> {
             final_ty = self.join_ty(&final_ty, ret_ty, stmt.line, stmt.col)?;
         }
 
-        if !self.is_assignable(ty, &final_ty) {
+        let expected_ret_ty = match ty {
+            Type::Function { return_ty, .. } => &(**return_ty),
+            _ => ty,
+        };
+
+        if !self.is_assignable(expected_ret_ty, &final_ty) {
             return self.loc_error(
                 stmt.line,
                 stmt.col,
                 format!(
                     "Function '{}' expected type '{:?}' but it's body returned '{:?}'",
-                    id, ty, final_ty
+                    id, expected_ret_ty, final_ty
                 ),
             );
         }
