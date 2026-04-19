@@ -2,6 +2,7 @@ pub(super) mod expr;
 pub(super) mod statement;
 
 use std::{
+    cmp::max,
     collections::HashMap,
     mem::take,
     path::{Path, PathBuf},
@@ -12,7 +13,7 @@ use crate::{
     structure::{
         ast::{ExprKind, Statement, Visibility},
         symbols::{ModuleTable, Scope, ScopedSymbol, StaticEntry},
-        types::Type,
+        types::{Sign, Type},
     },
 };
 
@@ -343,25 +344,64 @@ impl<'a> Checker<'a> {
         match (explicit, inferred) {
             (
                 Type::Integer {
-                    size: t_size,
-                    sign: t_sign,
+                    size: a_size,
+                    sign: a_sign,
                 },
                 Type::Integer {
-                    size: s_size,
-                    sign: s_sign,
+                    size: b_size,
+                    sign: b_sign,
                 },
-            ) => t_size >= s_size && t_sign >= s_sign,
+            ) => {
+                if a_sign == b_sign {
+                    a_size >= b_size
+                } else {
+                    a_size > b_size && matches!(a_sign, Sign::Signed)
+                }
+            }
             (
                 Type::IntRange {
-                    size: t_size,
-                    sign: t_sign,
+                    size: a_size,
+                    sign: a_sign,
                 },
                 Type::IntRange {
-                    size: s_size,
-                    sign: s_sign,
+                    size: b_size,
+                    sign: b_sign,
                 },
-            ) => t_size >= s_size && t_sign >= s_sign,
-            (Type::Float { size: t_size }, Type::Float { size: s_size }) => t_size >= s_size,
+            ) => {
+                if a_sign == b_sign {
+                    a_size >= b_size
+                } else {
+                    a_size > b_size && matches!(a_sign, Sign::Signed)
+                }
+            }
+            (Type::Float { size: a_size }, Type::Float { size: b_size }) => a_size >= b_size,
+            (Type::Pointer(a), Type::Pointer(b)) => a == b,
+            (Type::Ref(a), Type::Ref(b)) => a == b,
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(l_elem, r_elem)| self.is_assignable(l_elem, r_elem))
+            }
+            (Type::Array(a), Type::Array(b)) => a == b,
+            (
+                Type::Function {
+                    params: a_params,
+                    return_ty: a_ty,
+                },
+                Type::Function {
+                    params: b_params,
+                    return_ty: b_ty,
+                },
+            ) => {
+                a_params.len() == b_params.len()
+                    && self.is_assignable(a_ty, b_ty)
+                    && a_params
+                        .iter()
+                        .zip(b_params.iter())
+                        .all(|(a_elem, b_elem)| self.is_assignable(b_elem, a_elem))
+            }
+
             _ => false,
         }
     }
