@@ -88,8 +88,11 @@ fn main() -> Result<(), Error> {
     let symbol_table = Checker::new(&std_path, &prelude_module, &main_module, &registry).check()?;
 
     // TEST: let's save the AST tree and the symbol table to check them!
-    write("test/ast.txt", format!("{:#?}", registry))?;
-    write("test/symbol_table.txt", format!("{:#?}", symbol_table))?;
+    write("/home/canfro/ast.txt", format!("{:#?}", registry))?;
+    write(
+        "/home/canfro/symbol_table.txt",
+        format!("{:#?}", symbol_table),
+    )?;
 
     Ok(())
 }
