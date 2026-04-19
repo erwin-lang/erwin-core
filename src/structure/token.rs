@@ -30,6 +30,7 @@ pub(crate) enum TokenKind<'a> {
     Func,     // Function definition
     Return,   // Exit function with return value
     Yield,    // Yield a value from the local scope
+    Do,       // Used before control flow body
     For,      // For loop
     In,       // For loop range
     While,    // While loop

@@ -131,6 +131,7 @@ impl<'a> Lexer<'a> {
             "break" => TokenKind::Break,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
+            "do" => TokenKind::Do,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "pub" => TokenKind::Pub,

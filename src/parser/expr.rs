@@ -62,6 +62,8 @@ impl<'a> Parser<'a> {
             TokenKind::If => {
                 self.advance()?;
                 let condition = Box::new(self.parse_expr()?);
+
+                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -92,6 +94,8 @@ impl<'a> Parser<'a> {
 
                 self.consume(TokenKind::In, "Expected 'in'")?;
                 let iter = Box::new(self.parse_expr()?);
+
+                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -116,6 +120,8 @@ impl<'a> Parser<'a> {
             TokenKind::While => {
                 self.advance()?;
                 let condition = Box::new(self.parse_expr()?);
+
+                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
