@@ -599,31 +599,61 @@ impl<'a> Parser<'a> {
                     col: start_col,
                 })
             }
-            TokenKind::Identifier(id) => match self.peek(1)?.kind {
-                TokenKind::LBrace => {
-                    self.advance()?;
-                    self.advance()?;
-                    let fields = self.parse_comma_separated(|p| p.parse_instance_field())?;
-                    self.consume(TokenKind::RBrace, "Expected '}'")?;
-                    let kind = ExprKind::StateInstance { id, fields };
+            TokenKind::Identifier(id) => {
+                if matches!(self.peek(1)?.kind, TokenKind::LBrace) {
+                    let mut depth = 0;
+                    let mut offset = 1;
+                    let mut found_match = false;
 
-                    Ok(Expr {
-                        kind,
-                        line: start_line,
-                        col: start_col,
-                    })
-                }
-                _ => {
-                    self.advance()?;
-                    let kind = ExprKind::Identifier(id);
+                    while let Ok(token) = self.peek(offset) {
+                        match token.kind {
+                            TokenKind::LBrace => depth += 1,
+                            TokenKind::RBrace => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    found_match = true;
+                                    break;
+                                }
+                            }
+                            TokenKind::Eof => break,
+                            _ => {}
+                        }
+                        offset += 1;
+                    }
 
-                    Ok(Expr {
-                        kind,
-                        line: start_line,
-                        col: start_col,
-                    })
+                    let is_state_instance = if found_match {
+                        matches!(self.peek(offset + 1)?.kind, TokenKind::Do)
+                    } else {
+                        false
+                    };
+
+                    if is_state_instance {
+                        self.advance()?;
+                        self.advance()?;
+
+                        let fields = if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
+                            Vec::new()
+                        } else {
+                            self.parse_comma_separated(|p| p.parse_instance_field())?
+                        };
+
+                        self.consume(TokenKind::RBrace, "Expected '}'")?;
+
+                        return Ok(Expr {
+                            kind: ExprKind::StateInstance { id, fields },
+                            line: start_line,
+                            col: start_col,
+                        });
+                    }
                 }
-            },
+
+                self.advance()?;
+                Ok(Expr {
+                    kind: ExprKind::Identifier(id),
+                    line: start_line,
+                    col: start_col,
+                })
+            }
             TokenKind::LParen => {
                 self.advance()?;
 
