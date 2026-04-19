@@ -65,13 +65,24 @@ impl<'a> Checker<'a> {
             Error::Custom(format!("Module {} not found in registry", path.display()))
         })?;
 
+        let symbols = if path == self.prelude_module {
+            HashMap::new()
+        } else {
+            HashMap::from([(
+                "prelude",
+                ScopedSymbol {
+                    ty: Type::Module(self.prelude_module),
+                    visibility: &Visibility::Priv,
+                    is_static_member: true,
+                },
+            )])
+        };
+
         self.tables.insert(
             path,
             ModuleTable {
                 registry: HashMap::new(),
-                symbols: Scope {
-                    symbols: HashMap::new(),
-                },
+                symbols: Scope { symbols },
             },
         );
 
