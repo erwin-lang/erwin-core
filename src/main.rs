@@ -67,7 +67,7 @@ fn resolve_imports<'a>(
 fn main() -> Result<(), Error> {
     let args = args().collect::<Vec<String>>();
     if args.len() < 2 {
-        return Err(Error::Custom("Usage: erw <file>".to_string()));
+        return Err(Error::Custom("Usage: erwin <file>".to_string()));
     }
 
     let std_path = Path::new("/usr/lib/erwin/std/").canonicalize()?;
