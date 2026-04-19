@@ -20,11 +20,15 @@ pub(crate) enum StatementKind<'a> {
         alias: Option<&'a str>,
         path: Vec<&'a str>,
     },
-    Var {
+    VarDeclare {
         visibility: Visibility,
         kind: VarKind,
         id: &'a str,
         ty: Option<Type<'a>>,
+        value: Expr<'a>,
+    },
+    VarAssign {
+        id: Expr<'a>,
         value: Expr<'a>,
     },
     Node {

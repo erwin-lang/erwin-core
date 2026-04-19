@@ -21,6 +21,7 @@ pub(crate) enum TokenKind<'a> {
 
     // Keywords
     Var,      // Variable definition
+    Mut,      // Variable assignment
     Const,    // Constant variable definition
     Node,     // Node definition
     State,    // Object state definition block

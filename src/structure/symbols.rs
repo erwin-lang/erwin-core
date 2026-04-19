@@ -24,4 +24,5 @@ pub(crate) struct ScopedSymbol<'a> {
     pub(crate) ty: Type<'a>,
     pub(crate) visibility: &'a Visibility,
     pub(crate) is_static_member: bool,
+    pub(crate) is_mutable: bool,
 }

@@ -25,6 +25,7 @@ impl<'a> Checker<'a> {
                     ty: ty.clone(),
                     visibility,
                     is_static_member: true,
+                    is_mutable: false,
                 },
                 stmt.line,
                 stmt.col,
@@ -41,6 +42,7 @@ impl<'a> Checker<'a> {
                     ty: ty.clone(),
                     visibility,
                     is_static_member: true,
+                    is_mutable: false,
                 },
                 stmt.line,
                 stmt.col,
@@ -62,13 +64,14 @@ impl<'a> Checker<'a> {
 
     pub(super) fn check_statement(&mut self, stmt: &'a Statement<'a>) -> Result<(), Error> {
         match &stmt.kind {
-            StatementKind::Var {
+            StatementKind::VarDeclare {
                 visibility,
                 kind: _,
                 id,
                 ty,
                 value,
             } => self.check_var(stmt, visibility, id, ty, value),
+            StatementKind::VarAssign { id, value } => self.check_assign(stmt, id, value),
             StatementKind::Node {
                 visibility: _,
                 id: _,
@@ -144,6 +147,7 @@ impl<'a> Checker<'a> {
             ty: Type::Module(registry_path),
             visibility: &Visibility::Priv,
             is_static_member: true,
+            is_mutable: false,
         };
 
         self.define(mod_name, symbol, stmt.line, stmt.col)
@@ -172,6 +176,7 @@ impl<'a> Checker<'a> {
                 ty: field.ty.clone(),
                 visibility,
                 is_static_member: true,
+                is_mutable: true,
             };
 
             entry.members.insert(field.id, member);
@@ -208,6 +213,7 @@ impl<'a> Checker<'a> {
                     ty: variant_ty,
                     visibility,
                     is_static_member: true,
+                    is_mutable: false,
                 },
             );
         }
@@ -250,6 +256,7 @@ impl<'a> Checker<'a> {
                             ty: final_ty,
                             visibility,
                             is_static_member: is_static,
+                            is_mutable: false,
                         },
                     );
                 }
@@ -302,10 +309,55 @@ impl<'a> Checker<'a> {
                 ty: final_ty,
                 visibility,
                 is_static_member: false,
+                is_mutable: true,
             },
             stmt.line,
             stmt.col,
         )
+    }
+
+    fn check_assign(
+        &mut self,
+        stmt: &'a Statement<'a>,
+        var: &'a Expr<'a>,
+        value: &'a Expr<'a>,
+    ) -> Result<(), Error> {
+        let var_id = match var.kind {
+            ExprKind::Identifier(id) => id,
+            ExprKind::StaticAccess { member, .. } => member,
+            ExprKind::MemberAccess { member, .. } => member,
+            _ => {
+                return self.loc_error(
+                    var.line,
+                    var.col,
+                    "Symbol does not support assignment".to_string(),
+                );
+            }
+        };
+
+        let value_ty = self.check_expr(stmt, value)?;
+        let symbol = if let Some(s) = self.resolve(var_id) {
+            s
+        } else {
+            return self.loc_error(var.line, var.col, "Symbol hasn't been declared".to_string());
+        };
+
+        if !symbol.is_mutable {
+            return self.loc_error(var.line, var.col, "Symbol is not mutable".to_string());
+        }
+
+        if !self.is_assignable(&symbol.ty, &value_ty) {
+            return self.loc_error(
+                value.line,
+                value.col,
+                format!(
+                    "Type mismatch: expected '{:?}', found '{:?}'",
+                    &symbol.ty, &value_ty
+                ),
+            );
+        }
+
+        Ok(())
     }
 
     fn check_node(
@@ -370,6 +422,7 @@ impl<'a> Checker<'a> {
                     ty: param.ty.clone(),
                     visibility: &Visibility::Priv,
                     is_static_member: false,
+                    is_mutable: false,
                 },
                 stmt.line,
                 stmt.col,
@@ -440,6 +493,7 @@ impl<'a> Checker<'a> {
                                 ty: Type::from_str(id),
                                 visibility: &Visibility::Priv,
                                 is_static_member: false,
+                                is_mutable: false,
                             },
                             stmt.line,
                             stmt.col,
@@ -453,6 +507,7 @@ impl<'a> Checker<'a> {
                                 ty: param.ty.clone(),
                                 visibility: &Visibility::Priv,
                                 is_static_member: false,
+                                is_mutable: false,
                             },
                             stmt.line,
                             stmt.col,

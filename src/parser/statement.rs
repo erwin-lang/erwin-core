@@ -14,6 +14,7 @@ impl<'a> Parser<'a> {
             TokenKind::Pub => self.parse_visibility(),
             TokenKind::Import => self.parse_import(),
             TokenKind::Var => self.parse_var(VarKind::Var, Visibility::Priv),
+            TokenKind::Mut => self.parse_assign(),
             TokenKind::Node => self.parse_node(Visibility::Priv),
             TokenKind::Const => self.parse_var(VarKind::Const, Visibility::Priv),
             TokenKind::Func => self.parse_func(Visibility::Priv),
@@ -79,7 +80,7 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::Semicolon, "Expected ';'")?;
         }
 
-        let kind = StatementKind::Var {
+        let kind = StatementKind::VarDeclare {
             visibility,
             kind,
             id,
@@ -89,6 +90,28 @@ impl<'a> Parser<'a> {
 
         Ok(Statement {
             kind,
+            line: start_line,
+            col: start_col,
+        })
+    }
+
+    fn parse_assign(&mut self) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
+        self.advance()?;
+
+        let id = self.parse_expr()?;
+
+        self.consume(TokenKind::Assign, "Expected '='")?;
+        let value = self.parse_expr()?;
+
+        if !matches!(value.kind, ExprKind::Block(_)) {
+            self.consume(TokenKind::Semicolon, "Expected ';'")?;
+        }
+
+        Ok(Statement {
+            kind: StatementKind::VarAssign { id, value },
             line: start_line,
             col: start_col,
         })

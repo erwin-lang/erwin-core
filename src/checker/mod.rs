@@ -74,6 +74,7 @@ impl<'a> Checker<'a> {
                     ty: Type::Module(self.prelude_module),
                     visibility: &Visibility::Priv,
                     is_static_member: true,
+                    is_mutable: false,
                 },
             )])
         };

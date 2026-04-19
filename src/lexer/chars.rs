@@ -115,6 +115,7 @@ impl<'a> Lexer<'a> {
 
         let kind = match identifier {
             "var" => TokenKind::Var,
+            "mut" => TokenKind::Mut,
             "node" => TokenKind::Node,
             "const" => TokenKind::Const,
             "state" => TokenKind::State,
