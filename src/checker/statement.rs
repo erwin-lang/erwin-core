@@ -4,7 +4,9 @@ use crate::{
     checker::Checker,
     error::Error,
     structure::{
-        ast::{Expr, ExprKind, Field, Param, Statement, StatementKind, Variant, Visibility},
+        ast::{
+            Expr, ExprKind, Field, Param, Statement, StatementKind, VarKind, Variant, Visibility,
+        },
         symbols::{ScopedSymbol, StaticEntry},
         types::Type,
     },
@@ -66,11 +68,11 @@ impl<'a> Checker<'a> {
         match &stmt.kind {
             StatementKind::VarDeclare {
                 visibility,
-                kind: _,
+                kind,
                 id,
                 ty,
                 value,
-            } => self.check_var(stmt, visibility, id, ty, value),
+            } => self.check_var(stmt, visibility, kind, id, ty, value),
             StatementKind::VarAssign { id, value } => self.check_assign(stmt, id, value),
             StatementKind::Node {
                 visibility: _,
@@ -270,6 +272,7 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &'a Statement<'a>,
         visibility: &'a Visibility,
+        kind: &VarKind,
         id: &'a str,
         ty: &Option<Type<'a>>,
         value: &'a Expr<'a>,
@@ -303,13 +306,18 @@ impl<'a> Checker<'a> {
             );
         }
 
+        let is_mutable = match kind {
+            VarKind::Const => false,
+            VarKind::Var => true,
+        };
+
         self.define(
             id,
             ScopedSymbol {
                 ty: final_ty,
                 visibility,
-                is_static_member: false,
-                is_mutable: true,
+                is_static_member: self.current_scopes.len() == 1,
+                is_mutable,
             },
             stmt.line,
             stmt.col,

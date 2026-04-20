@@ -2,7 +2,6 @@ pub(super) mod expr;
 pub(super) mod statement;
 
 use std::{
-    cmp::max,
     collections::HashMap,
     mem::take,
     path::{Path, PathBuf},
