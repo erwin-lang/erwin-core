@@ -11,7 +11,7 @@ use crate::{
     error::Error,
     structure::{
         ast::{ExprKind, Statement, Visibility},
-        symbols::{ModuleTable, Scope, ScopedSymbol, StaticEntry},
+        symbols::{Entry, ModuleTable, Symbol},
         types::{Sign, Type},
     },
 };
@@ -24,7 +24,7 @@ pub(crate) struct Checker<'a> {
     pub(super) modules: &'a HashMap<PathBuf, Vec<Statement<'a>>>,
     pub(super) tables: HashMap<&'a Path, ModuleTable<'a>>,
     pub(super) current_module: &'a Path,
-    pub(super) current_scopes: Vec<Scope<'a>>,
+    pub(super) current_scopes: Vec<HashMap<&'a str, Symbol<'a>>>,
     pub(super) returns: Vec<Type<'a>>,
 }
 
@@ -56,7 +56,7 @@ impl<'a> Checker<'a> {
 
     pub(super) fn check_module(&mut self, path: &'a Path) -> Result<(), Error> {
         if let Some(table) = self.tables.get(path)
-            && !table.symbols.symbols.is_empty()
+            && !table.symbols.is_empty()
         {
             return Ok(());
         }
@@ -65,25 +65,32 @@ impl<'a> Checker<'a> {
             Error::Custom(format!("Module {} not found in registry", path.display()))
         })?;
 
-        let symbols = if path == self.prelude_module {
-            HashMap::new()
+        let registry = if path == self.prelude_module {
+            self.fill_primitives()
         } else {
+            HashMap::new()
+        };
+
+        let symbols = if path == self.prelude_module {
             HashMap::from([(
                 "prelude",
-                ScopedSymbol {
+                Symbol {
                     ty: Type::Module(self.prelude_module),
                     visibility: &Visibility::Priv,
                     is_static_member: true,
                     is_mutable: false,
                 },
             )])
+        } else {
+            HashMap::new()
         };
 
         self.tables.insert(
             path,
             ModuleTable {
-                registry: HashMap::new(),
-                symbols: Scope { symbols },
+                registry,
+                symbols,
+                containers: HashMap::new(),
             },
         );
 
@@ -111,12 +118,14 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn enter_scope(&mut self) {
-        self.current_scopes.push(Scope {
-            symbols: HashMap::new(),
-        });
+        self.current_scopes.push(HashMap::new());
     }
 
-    pub(super) fn exit_local_scope(&mut self, line: usize, col: usize) -> Result<Scope<'a>, Error> {
+    pub(super) fn exit_local_scope(
+        &mut self,
+        line: usize,
+        col: usize,
+    ) -> Result<HashMap<&'a str, Symbol<'a>>, Error> {
         if self.current_scopes.len() == 1 {
             return self.loc_error(line, col, "Cannot exit out of global scope".to_string());
         }
@@ -124,7 +133,7 @@ impl<'a> Checker<'a> {
         Ok(self.current_scopes.pop().unwrap())
     }
 
-    pub(super) fn exit_global_scope(&mut self) -> Result<Scope<'a>, Error> {
+    pub(super) fn exit_global_scope(&mut self) -> Result<HashMap<&'a str, Symbol<'a>>, Error> {
         if self.current_scopes.len() != 1 {
             return Err(Error::Custom(
                 "Cannot exit this scope as it is not global".to_string(),
@@ -134,15 +143,15 @@ impl<'a> Checker<'a> {
         Ok(self.current_scopes.pop().unwrap())
     }
 
-    pub(super) fn define(
+    pub(super) fn define_symbol(
         &mut self,
         id: &'a str,
-        symbol: ScopedSymbol<'a>,
+        symbol: Symbol<'a>,
         line: usize,
         col: usize,
     ) -> Result<(), Error> {
         if let Some(scope) = self.current_scopes.last_mut() {
-            if scope.symbols.contains_key(id) {
+            if scope.contains_key(id) {
                 return self.loc_error(
                     line,
                     col,
@@ -150,18 +159,18 @@ impl<'a> Checker<'a> {
                 );
             }
 
-            scope.symbols.insert(id, symbol);
+            scope.insert(id, symbol);
             Ok(())
         } else {
             self.loc_error(line, col, "No active scope to define symbol in".to_string())
         }
     }
 
-    pub(super) fn define_static(
+    pub(super) fn define_entry(
         &mut self,
         path: &Path,
         id: &'a str,
-        entry: StaticEntry<'a>,
+        entry: Entry<'a>,
         line: usize,
         col: usize,
     ) -> Result<(), Error> {
@@ -191,31 +200,31 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    pub(super) fn resolve(&self, id: &str) -> Option<&ScopedSymbol<'a>> {
+    pub(super) fn resolve_symbol(&self, id: &str) -> Option<&Symbol<'a>> {
         for scope in self.current_scopes.iter().rev() {
-            if let Some(symbol) = scope.symbols.get(id) {
+            if let Some(symbol) = scope.get(id) {
                 return Some(symbol);
             }
         }
         None
     }
 
-    pub(super) fn resolve_mut(&mut self, id: &str) -> Option<&mut ScopedSymbol<'a>> {
+    pub(super) fn resolve_symbol_mut(&mut self, id: &str) -> Option<&mut Symbol<'a>> {
         for scope in self.current_scopes.iter_mut().rev() {
-            if let Some(symbol) = scope.symbols.get_mut(id) {
+            if let Some(symbol) = scope.get_mut(id) {
                 return Some(symbol);
             }
         }
         None
     }
 
-    pub(super) fn resolve_external(
+    pub(super) fn resolve_symbol_external(
         &self,
         id: &str,
         path: &Path,
         line: usize,
         col: usize,
-    ) -> Result<&ScopedSymbol<'a>, Error> {
+    ) -> Result<&Symbol<'a>, Error> {
         let module_table = if let Some(m) = self.tables.get(path) {
             m
         } else {
@@ -226,7 +235,7 @@ impl<'a> Checker<'a> {
             );
         };
 
-        let symbol = if let Some(s) = module_table.symbols.symbols.get(id) {
+        let symbol = if let Some(s) = module_table.symbols.get(id) {
             s
         } else {
             return self.loc_error(
@@ -243,13 +252,13 @@ impl<'a> Checker<'a> {
         Ok(symbol)
     }
 
-    pub(super) fn resolve_static(
+    pub(super) fn resolve_entry(
         &self,
         id: &str,
         path: &Path,
         line: usize,
         col: usize,
-    ) -> Result<&StaticEntry<'a>, Error> {
+    ) -> Result<&Entry<'a>, Error> {
         let table = if let Some(m) = self.tables.get(path) {
             m
         } else {
@@ -277,13 +286,13 @@ impl<'a> Checker<'a> {
         Ok(entry)
     }
 
-    pub(super) fn resolve_static_mut(
+    pub(super) fn resolve_entry_mut(
         &mut self,
         id: &str,
         path: &Path,
         line: usize,
         col: usize,
-    ) -> Result<&mut StaticEntry<'a>, Error> {
+    ) -> Result<&mut Entry<'a>, Error> {
         let table = if let Some(m) = self.tables.get(path) {
             m
         } else {
@@ -317,6 +326,40 @@ impl<'a> Checker<'a> {
             .unwrap();
 
         Ok(entry_mut)
+    }
+
+    pub(super) fn resolve_entry_external(
+        &self,
+        id: &str,
+        path: &Path,
+        line: usize,
+        col: usize,
+    ) -> Result<&Entry<'a>, Error> {
+        let module_table = if let Some(m) = self.tables.get(path) {
+            m
+        } else {
+            return self.loc_error(
+                line,
+                col,
+                format!("Module {} not found in registry", path.display()),
+            );
+        };
+
+        let entry = if let Some(e) = module_table.registry.get(id) {
+            e
+        } else {
+            return self.loc_error(
+                line,
+                col,
+                format!("Entry '{}' not found in module {}", id, path.display()),
+            );
+        };
+
+        if matches!(entry.visibility, Visibility::Priv) {
+            return self.loc_error(line, col, format!("Entry '{}' is private", id));
+        }
+
+        Ok(entry)
     }
 
     pub(super) fn loc_error<T>(&self, line: usize, col: usize, msg: String) -> Result<T, Error> {
@@ -429,5 +472,54 @@ impl<'a> Checker<'a> {
         }
 
         self.loc_error(line, col, "Types are not comparable".to_string())
+    }
+
+    fn fill_primitives(&self) -> HashMap<&'a str, Entry<'a>> {
+        let primitives = [
+            "Bool",
+            "UInt8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt128",
+            "Int8",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int128",
+            "URange8",
+            "URange16",
+            "URange32",
+            "URange64",
+            "URange128",
+            "Range8",
+            "Range16",
+            "Range32",
+            "Range64",
+            "Range128",
+            "Float32",
+            "Float64",
+            "Str",
+            "Ptr",
+            "Ref",
+            "Tuple",
+            "Array",
+            "Func",
+            "Node",
+        ];
+
+        let mut registry = HashMap::new();
+
+        for ty in primitives {
+            registry.insert(
+                ty,
+                Entry {
+                    visibility: &Visibility::Pub,
+                    symbols: HashMap::new(),
+                },
+            );
+        }
+
+        registry
     }
 }

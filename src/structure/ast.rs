@@ -49,6 +49,11 @@ pub(crate) enum StatementKind<'a> {
         id: &'a str,
         fields: Vec<Field<'a>>,
     },
+    Container {
+        visibility: Visibility,
+        id: &'a str,
+        types: Vec<&'a str>,
+    },
     Method {
         id: &'a str,
         methods: Expr<'a>,

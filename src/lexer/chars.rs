@@ -119,6 +119,7 @@ impl<'a> Lexer<'a> {
             "node" => TokenKind::Node,
             "const" => TokenKind::Const,
             "state" => TokenKind::State,
+            "container" => TokenKind::Container,
             "enum" => TokenKind::Enum,
             "method" => TokenKind::Method,
             "func" => TokenKind::Func,

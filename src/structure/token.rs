@@ -20,28 +20,29 @@ pub(crate) enum TokenKind<'a> {
     Identifier(&'a str),
 
     // Keywords
-    Var,      // Variable definition
-    Mut,      // Variable assignment
-    Const,    // Constant variable definition
-    Node,     // Node definition
-    State,    // Object state definition block
-    Enum,     // Sum type definition block
-    Method,   // Method implementation block
-    Func,     // Function definition
-    Return,   // Exit function with return value
-    Yield,    // Yield a value from the local scope
-    Do,       // Used before control flow body
-    For,      // For loop
-    In,       // For loop range
-    While,    // While loop
-    Continue, // Proceed to next iteration in loop
-    Break,    // Break out of loop
-    If,       // If block
-    Else,     // Used in control flow to indicate fallback expression
-    True,     // Boolean true
-    False,    // Boolean false
-    Pub,      // Public visibility modifier
-    Import,   // Import another module
+    Var,       // Variable definition
+    Mut,       // Variable assignment
+    Const,     // Constant variable definition
+    Node,      // Node definition
+    State,     // Object state definition block
+    Container, // Type generic container
+    Enum,      // Sum type definition block
+    Method,    // Method implementation block
+    Func,      // Function definition
+    Return,    // Exit function with return value
+    Yield,     // Yield a value from the local scope
+    Do,        // Used before control flow body
+    For,       // For loop
+    In,        // For loop range
+    While,     // While loop
+    Continue,  // Proceed to next iteration in loop
+    Break,     // Break out of loop
+    If,        // If block
+    Else,      // Used in control flow to indicate fallback expression
+    True,      // Boolean true
+    False,     // Boolean false
+    Pub,       // Public visibility modifier
+    Import,    // Import another module
 
     // Primitive types
     Bool,

@@ -8,7 +8,7 @@ use crate::{
             BinaryOp, Expr, ExprKind, InstanceField, Param, Statement, StatementKind, UnaryOp,
             Visibility,
         },
-        symbols::ScopedSymbol,
+        symbols::Symbol,
         types::{FloatSize, IntSize, Sign, Type},
     },
 };
@@ -137,19 +137,19 @@ impl<'a> Checker<'a> {
     }
 
     fn check_identifier(&self, expr: &Expr<'a>, id: &'a str) -> Result<Type<'a>, Error> {
-        if let Some(s) = self.resolve(id) {
+        if let Some(s) = self.resolve_symbol(id) {
             return Ok(s.ty.clone());
         }
 
         if self
-            .resolve_static(id, self.current_module, expr.line, expr.col)
+            .resolve_entry(id, self.current_module, expr.line, expr.col)
             .is_ok()
         {
             return Ok(Type::from_str(id));
         }
 
         if self
-            .resolve_static(id, self.prelude_module, expr.line, expr.col)
+            .resolve_entry(id, self.prelude_module, expr.line, expr.col)
             .is_ok()
         {
             return Ok(Type::from_str(id));
@@ -194,9 +194,9 @@ impl<'a> Checker<'a> {
         }
 
         let entry =
-            self.resolve_static(registry_id, self.current_module, target.line, target.col)?;
+            self.resolve_entry(registry_id, self.current_module, target.line, target.col)?;
 
-        if let Some(symbol) = entry.members.get(member) {
+        if let Some(symbol) = entry.symbols.get(member) {
             if symbol.is_static_member {
                 return self.loc_error(
                     target.line,
@@ -222,13 +222,22 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &'a Statement<'a>,
         target: &'a Expr<'a>,
-        member: &str,
+        member: &'a str,
     ) -> Result<Type<'a>, Error> {
         let target_ty = self.check_expr(stmt, target)?;
 
         if let Type::Module(path) = target_ty {
-            let symbol = self.resolve_external(member, path, target.line, target.col)?;
-            return Ok(symbol.ty.clone());
+            if let Ok(symbol) = self.resolve_symbol_external(member, path, target.line, target.col)
+            {
+                return Ok(symbol.ty.clone());
+            }
+
+            if self
+                .resolve_entry_external(member, path, target.line, target.col)
+                .is_ok()
+            {
+                return Ok(Type::from_str(member));
+            }
         }
 
         let registry_id = target_ty.as_str();
@@ -247,9 +256,9 @@ impl<'a> Checker<'a> {
         }
 
         let entry =
-            self.resolve_static(registry_id, self.current_module, target.line, target.col)?;
+            self.resolve_entry(registry_id, self.current_module, target.line, target.col)?;
 
-        if let Some(symbol) = entry.members.get(member) {
+        if let Some(symbol) = entry.symbols.get(member) {
             if !symbol.is_static_member {
                 return self.loc_error(
                     target.line,
@@ -351,8 +360,8 @@ impl<'a> Checker<'a> {
         fields: &'a Vec<InstanceField<'a>>,
     ) -> Result<Type<'a>, Error> {
         let mut members = self
-            .resolve_static(id, self.current_module, expr.line, expr.col)?
-            .members
+            .resolve_entry(id, self.current_module, expr.line, expr.col)?
+            .symbols
             .clone();
 
         for field in fields {
@@ -617,9 +626,9 @@ impl<'a> Checker<'a> {
         };
 
         self.enter_scope();
-        self.define(
+        self.define_symbol(
             elem,
-            ScopedSymbol {
+            Symbol {
                 ty: elem_ty,
                 visibility: &Visibility::Priv,
                 is_static_member: false,
@@ -687,9 +696,9 @@ impl<'a> Checker<'a> {
         let parent_returns = take(&mut self.returns);
 
         for param in params {
-            self.define(
+            self.define_symbol(
                 param.id,
-                ScopedSymbol {
+                Symbol {
                     ty: param.ty.clone(),
                     visibility: &Visibility::Priv,
                     is_static_member: false,

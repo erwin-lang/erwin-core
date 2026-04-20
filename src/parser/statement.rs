@@ -19,6 +19,7 @@ impl<'a> Parser<'a> {
             TokenKind::Const => self.parse_var(VarKind::Const, Visibility::Priv),
             TokenKind::Func => self.parse_func(Visibility::Priv),
             TokenKind::State => self.parse_state(Visibility::Priv),
+            TokenKind::Container => self.parse_container(Visibility::Priv),
             TokenKind::Enum => self.parse_enum(Visibility::Priv),
             TokenKind::Method => self.parse_method(),
             _ => self.parse_statement_expr(),
@@ -44,10 +45,8 @@ impl<'a> Parser<'a> {
         let path = self.parse_path()?;
         self.consume(TokenKind::Semicolon, "Expected ';'")?;
 
-        let kind = StatementKind::Import { alias, path };
-
         Ok(Statement {
-            kind,
+            kind: StatementKind::Import { alias, path },
             line: start_line,
             col: start_col,
         })
@@ -80,16 +79,14 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::Semicolon, "Expected ';'")?;
         }
 
-        let kind = StatementKind::VarDeclare {
-            visibility,
-            kind,
-            id,
-            ty,
-            value,
-        };
-
         Ok(Statement {
-            kind,
+            kind: StatementKind::VarDeclare {
+                visibility,
+                kind,
+                id,
+                ty,
+                value,
+            },
             line: start_line,
             col: start_col,
         })
@@ -139,15 +136,13 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::Semicolon, "Expected ';'")?;
         }
 
-        let kind = StatementKind::Node {
-            visibility,
-            id,
-            ty,
-            value,
-        };
-
         Ok(Statement {
-            kind,
+            kind: StatementKind::Node {
+                visibility,
+                id,
+                ty,
+                value,
+            },
             line: start_line,
             col: start_col,
         })
@@ -178,28 +173,20 @@ impl<'a> Parser<'a> {
             return_ty: Box::new(self.parse_type()?),
         };
 
-        let body_line = self.peek(0)?.line;
-        let body_col = self.peek(0)?.col;
         let body = self.parse_expr()?;
 
         if !matches!(body.kind, ExprKind::Block(_)) {
-            return self.loc_error(
-                body_line,
-                body_col,
-                "Function body must be a block expression",
-            );
+            self.consume(TokenKind::Semicolon, "Expected ';'")?;
         }
 
-        let kind = StatementKind::Func {
-            visibility,
-            id,
-            params,
-            ty,
-            body,
-        };
-
         Ok(Statement {
-            kind,
+            kind: StatementKind::Func {
+                visibility,
+                id,
+                params,
+                ty,
+                body,
+            },
             line: start_line,
             col: start_col,
         })
@@ -222,14 +209,46 @@ impl<'a> Parser<'a> {
         let fields = self.parse_comma_separated(|p| p.parse_field())?;
         self.consume(TokenKind::RBrace, "Expected '}'")?;
 
-        let kind = StatementKind::State {
-            visibility,
-            id,
-            fields,
+        Ok(Statement {
+            kind: StatementKind::State {
+                visibility,
+                id,
+                fields,
+            },
+            line: start_line,
+            col: start_col,
+        })
+    }
+
+    fn parse_container(&mut self, visibility: Visibility) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
+        self.advance()?;
+
+        let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
+            self.advance()?;
+            name
+        } else {
+            return self.error("Expected container name");
         };
 
+        self.consume(TokenKind::LBrace, "Expected '{'")?;
+        let types = self.parse_comma_separated(|p| {
+            if let TokenKind::Identifier(ty) = p.peek(0)?.kind {
+                Ok(ty)
+            } else {
+                p.error("Expected type name")
+            }
+        })?;
+        self.consume(TokenKind::RBrace, "Expected '}'")?;
+
         Ok(Statement {
-            kind,
+            kind: StatementKind::Container {
+                visibility,
+                id,
+                types,
+            },
             line: start_line,
             col: start_col,
         })
@@ -252,14 +271,12 @@ impl<'a> Parser<'a> {
         let variants = self.parse_comma_separated(|p| p.parse_variant())?;
         self.consume(TokenKind::RBrace, "Expected '}'")?;
 
-        let kind = StatementKind::Enum {
-            visibility,
-            id,
-            variants,
-        };
-
         Ok(Statement {
-            kind,
+            kind: StatementKind::Enum {
+                visibility,
+                id,
+                variants,
+            },
             line: start_line,
             col: start_col,
         })
@@ -300,10 +317,8 @@ impl<'a> Parser<'a> {
             );
         }
 
-        let kind = StatementKind::Method { id, methods };
-
         Ok(Statement {
-            kind,
+            kind: StatementKind::Method { id, methods },
             line: start_line,
             col: start_col,
         })
@@ -339,10 +354,8 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::Semicolon, "Expected ';'")?;
         }
 
-        let kind = StatementKind::Expr(expr);
-
         Ok(Statement {
-            kind,
+            kind: StatementKind::Expr(expr),
             line: start_line,
             col: start_col,
         })
@@ -356,6 +369,7 @@ impl<'a> Parser<'a> {
             TokenKind::Const => self.parse_var(VarKind::Const, Visibility::Pub),
             TokenKind::Func => self.parse_func(Visibility::Pub),
             TokenKind::State => self.parse_state(Visibility::Pub),
+            TokenKind::Container => self.parse_container(Visibility::Pub),
             TokenKind::Pub => self.error("Repeated visibility modifier"),
             _ => self.error("Invalid visibility modifier"),
         }

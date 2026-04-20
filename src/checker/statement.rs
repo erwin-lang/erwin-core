@@ -7,7 +7,7 @@ use crate::{
         ast::{
             Expr, ExprKind, Field, Param, Statement, StatementKind, VarKind, Variant, Visibility,
         },
-        symbols::{ScopedSymbol, StaticEntry},
+        symbols::{Entry, Symbol},
         types::Type,
     },
 };
@@ -21,9 +21,9 @@ impl<'a> Checker<'a> {
                 id,
                 ty,
                 value: _,
-            } => self.define(
+            } => self.define_symbol(
                 id,
-                ScopedSymbol {
+                Symbol {
                     ty: ty.clone(),
                     visibility,
                     is_static_member: true,
@@ -38,9 +38,9 @@ impl<'a> Checker<'a> {
                 params: _,
                 ty,
                 body: _,
-            } => self.define(
+            } => self.define_symbol(
                 id,
-                ScopedSymbol {
+                Symbol {
                     ty: ty.clone(),
                     visibility,
                     is_static_member: true,
@@ -54,6 +54,11 @@ impl<'a> Checker<'a> {
                 id,
                 fields,
             } => self.check_global_state(stmt, visibility, id, fields),
+            StatementKind::Container {
+                visibility,
+                id,
+                types,
+            } => self.check_global_container(stmt, visibility, id, types),
             StatementKind::Enum {
                 visibility,
                 id,
@@ -145,14 +150,14 @@ impl<'a> Checker<'a> {
         } else {
             path.last().unwrap()
         };
-        let symbol = ScopedSymbol {
+        let symbol = Symbol {
             ty: Type::Module(registry_path),
             visibility: &Visibility::Priv,
             is_static_member: true,
             is_mutable: false,
         };
 
-        self.define(mod_name, symbol, stmt.line, stmt.col)
+        self.define_symbol(mod_name, symbol, stmt.line, stmt.col)
     }
 
     fn check_global_state(
@@ -162,9 +167,9 @@ impl<'a> Checker<'a> {
         id: &'a str,
         fields: &'a Vec<Field<'a>>,
     ) -> Result<(), Error> {
-        let mut entry = StaticEntry {
+        let mut entry = Entry {
             visibility,
-            members: HashMap::new(),
+            symbols: HashMap::new(),
         };
 
         for field in fields {
@@ -174,17 +179,27 @@ impl<'a> Checker<'a> {
                 &field.visibility
             };
 
-            let member = ScopedSymbol {
+            let member = Symbol {
                 ty: field.ty.clone(),
                 visibility,
                 is_static_member: true,
                 is_mutable: true,
             };
 
-            entry.members.insert(field.id, member);
+            entry.symbols.insert(field.id, member);
         }
 
-        self.define_static(self.current_module, id, entry, stmt.line, stmt.col)
+        self.define_entry(self.current_module, id, entry, stmt.line, stmt.col)
+    }
+
+    fn check_global_container(
+        &mut self,
+        stmt: &Statement<'a>,
+        visibility: &'a Visibility,
+        id: &'a str,
+        types: &Vec<&str>,
+    ) -> Result<(), Error> {
+        Ok(()) // TODO: implement
     }
 
     fn check_global_enum(
@@ -194,9 +209,9 @@ impl<'a> Checker<'a> {
         id: &'a str,
         variants: &Vec<Variant<'a>>,
     ) -> Result<(), Error> {
-        let mut entry = StaticEntry {
+        let mut entry = Entry {
             visibility,
-            members: HashMap::new(),
+            symbols: HashMap::new(),
         };
 
         for variant in variants {
@@ -209,9 +224,9 @@ impl<'a> Checker<'a> {
                 }
             };
 
-            entry.members.insert(
+            entry.symbols.insert(
                 variant.id,
-                ScopedSymbol {
+                Symbol {
                     ty: variant_ty,
                     visibility,
                     is_static_member: true,
@@ -220,7 +235,7 @@ impl<'a> Checker<'a> {
             );
         }
 
-        self.define_static(self.current_module, id, entry, stmt.line, stmt.col)
+        self.define_entry(self.current_module, id, entry, stmt.line, stmt.col)
     }
 
     pub(super) fn check_global_method(
@@ -229,7 +244,7 @@ impl<'a> Checker<'a> {
         id: &'a str,
         methods: &'a Expr<'a>,
     ) -> Result<(), Error> {
-        let entry = self.resolve_static_mut(id, self.current_module, stmt.line, stmt.col)?;
+        let entry = self.resolve_entry_mut(id, self.current_module, stmt.line, stmt.col)?;
 
         if let ExprKind::Block(stmts) = &methods.kind {
             for stmt in stmts {
@@ -252,9 +267,9 @@ impl<'a> Checker<'a> {
                         ty_params.insert(0, Type::from_str(id));
                     }
 
-                    entry.members.insert(
+                    entry.symbols.insert(
                         f_id,
-                        ScopedSymbol {
+                        Symbol {
                             ty: final_ty,
                             visibility,
                             is_static_member: is_static,
@@ -311,9 +326,9 @@ impl<'a> Checker<'a> {
             VarKind::Var => true,
         };
 
-        self.define(
+        self.define_symbol(
             id,
-            ScopedSymbol {
+            Symbol {
                 ty: final_ty,
                 visibility,
                 is_static_member: self.current_scopes.len() == 1,
@@ -344,7 +359,7 @@ impl<'a> Checker<'a> {
         };
 
         let value_ty = self.check_expr(stmt, value)?;
-        let symbol = if let Some(s) = self.resolve(var_id) {
+        let symbol = if let Some(s) = self.resolve_symbol(var_id) {
             s
         } else {
             return self.loc_error(var.line, var.col, "Symbol hasn't been declared".to_string());
@@ -424,9 +439,9 @@ impl<'a> Checker<'a> {
         let parent_returns = take(&mut self.returns);
 
         for param in params {
-            self.define(
+            self.define_symbol(
                 param.id,
-                ScopedSymbol {
+                Symbol {
                     ty: param.ty.clone(),
                     visibility: &Visibility::Priv,
                     is_static_member: false,
@@ -484,9 +499,9 @@ impl<'a> Checker<'a> {
                 {
                     let is_static = {
                         let entry =
-                            self.resolve_static(id, self.current_module, stmt.line, stmt.col)?;
+                            self.resolve_entry(id, self.current_module, stmt.line, stmt.col)?;
 
-                        if let Some(s) = entry.members.get(f_id) {
+                        if let Some(s) = entry.symbols.get(f_id) {
                             s.is_static_member
                         } else {
                             return self.loc_error(
@@ -500,9 +515,9 @@ impl<'a> Checker<'a> {
                     self.enter_scope();
 
                     if !is_static {
-                        self.define(
+                        self.define_symbol(
                             "self",
-                            ScopedSymbol {
+                            Symbol {
                                 ty: Type::from_str(id),
                                 visibility: &Visibility::Priv,
                                 is_static_member: false,
@@ -514,9 +529,9 @@ impl<'a> Checker<'a> {
                     }
 
                     for param in params {
-                        self.define(
+                        self.define_symbol(
                             param.id,
-                            ScopedSymbol {
+                            Symbol {
                                 ty: param.ty.clone(),
                                 visibility: &Visibility::Priv,
                                 is_static_member: false,
