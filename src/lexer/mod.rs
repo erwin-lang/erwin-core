@@ -18,7 +18,7 @@ impl<'a> Lexer<'a> {
             code,
             current: 0,
             line: 1,
-            column: 0,
+            column: 1,
         }
     }
 
