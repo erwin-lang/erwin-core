@@ -104,6 +104,9 @@ impl<'a> Lexer<'a> {
 
     pub(super) fn tokenize_identifier(&mut self) -> Result<Token<'a>, Error> {
         let start_index = self.current;
+        let start_line = self.line;
+        let start_col = self.column;
+
         while let Some(char) = self.peek() {
             if char.is_alphanumeric() || char == '_' {
                 self.advance();
@@ -165,7 +168,7 @@ impl<'a> Lexer<'a> {
             _ => TokenKind::Identifier(identifier),
         };
 
-        Ok(Token::new(kind, self.line, self.column))
+        Ok(Token::new(kind, start_line, start_col))
     }
 
     pub(super) fn tokenize_number(&mut self) -> Result<Token<'a>, Error> {
@@ -291,7 +294,7 @@ impl<'a> Lexer<'a> {
             Some(f) => Ok(Token::new(f, start_line, start_col)),
             None => Err(Error::Custom(format!(
                 "[{}, {}] Unexpected token",
-                self.line, self.column
+                start_line, start_col
             ))),
         }
     }
