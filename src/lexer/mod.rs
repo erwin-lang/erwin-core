@@ -18,7 +18,7 @@ impl<'a> Lexer<'a> {
             code,
             current: 0,
             line: 1,
-            column: 1,
+            column: 0,
         }
     }
 
@@ -51,13 +51,13 @@ impl<'a> Lexer<'a> {
 
     pub(super) fn advance(&mut self) {
         if let Some(c) = self.peek() {
-            self.current += c.len_utf8();
             if c == '\n' {
                 self.line += 1;
-                self.column = 1;
+                self.column = 0;
             } else {
                 self.column += 1;
             }
+            self.current += c.len_utf8();
         }
     }
 
