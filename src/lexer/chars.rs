@@ -6,9 +6,6 @@ use crate::{
 
 impl<'a> Lexer<'a> {
     pub(super) fn tokenize_chars(&mut self) -> Result<Token<'a>, Error> {
-        let start_line = self.line;
-        let start_col = self.column;
-
         match self.peek() {
             Some(c) => match c {
                 'a'..='z' | 'A'..='Z' | '_' => self.tokenize_identifier(),
@@ -17,7 +14,7 @@ impl<'a> Lexer<'a> {
                 '#' => self.tokenize_raw_string(),
                 '@' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::At, start_line, start_col))
+                    Ok(Token::new(TokenKind::At, self.line, self.column))
                 }
                 '=' => {
                     self.tokenize_double_symbol(Some(TokenKind::Assign), &[('=', TokenKind::Equal)])
@@ -49,56 +46,56 @@ impl<'a> Lexer<'a> {
                 '^' => self.tokenize_double_symbol(Some(TokenKind::Pow), &[('^', TokenKind::Xor)]),
                 '(' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::LParen, start_line, start_col))
+                    Ok(Token::new(TokenKind::LParen, self.line, self.column))
                 }
                 ')' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::RParen, start_line, start_col))
+                    Ok(Token::new(TokenKind::RParen, self.line, self.column))
                 }
                 '[' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::LSquare, start_line, start_col))
+                    Ok(Token::new(TokenKind::LSquare, self.line, self.column))
                 }
                 ']' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::RSquare, start_line, start_col))
+                    Ok(Token::new(TokenKind::RSquare, self.line, self.column))
                 }
                 '{' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::LBrace, start_line, start_col))
+                    Ok(Token::new(TokenKind::LBrace, self.line, self.column))
                 }
                 '}' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::RBrace, start_line, start_col))
+                    Ok(Token::new(TokenKind::RBrace, self.line, self.column))
                 }
                 ';' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::Semicolon, start_line, start_col))
+                    Ok(Token::new(TokenKind::Semicolon, self.line, self.column))
                 }
                 ',' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::Comma, start_line, start_col))
+                    Ok(Token::new(TokenKind::Comma, self.line, self.column))
                 }
                 '.' => self
                     .tokenize_double_symbol(Some(TokenKind::Dot), &[('.', TokenKind::DoubleDot)]),
                 '+' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::Plus, start_line, start_col))
+                    Ok(Token::new(TokenKind::Plus, self.line, self.column))
                 }
                 '-' => {
                     self.tokenize_double_symbol(Some(TokenKind::Minus), &[('>', TokenKind::RArrow)])
                 }
                 '*' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::Star, start_line, start_col))
+                    Ok(Token::new(TokenKind::Star, self.line, self.column))
                 }
                 '/' => {
                     self.advance();
-                    Ok(Token::new(TokenKind::Slash, start_line, start_col))
+                    Ok(Token::new(TokenKind::Slash, self.line, self.column))
                 }
                 _ => Err(Error::Custom(format!(
                     "[{}, {}] Unexpected token",
-                    start_line, start_col
+                    self.line, self.column
                 ))),
             },
             None => Err(Error::Custom("Unexpected end of file".to_string())),
