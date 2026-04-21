@@ -11,8 +11,8 @@ use crate::{
     error::Error,
     structure::{
         ast::{ExprKind, Statement, Visibility},
-        symbols::{Entry, ModuleTable, Symbol},
-        types::{Sign, Type},
+        symbols::{Container, Entry, ModuleTable, Symbol},
+        types::{FloatSize, IntSize, Sign, Type},
     },
 };
 
@@ -150,6 +150,27 @@ impl<'a> Checker<'a> {
         line: usize,
         col: usize,
     ) -> Result<(), Error> {
+        let module_table = if let Some(m) = self.tables.get(self.current_module) {
+            m
+        } else {
+            return self.loc_error(
+                line,
+                col,
+                format!(
+                    "Module {} not found in registry",
+                    self.current_module.display()
+                ),
+            );
+        };
+
+        if module_table.registry.contains_key(id) || module_table.containers.contains_key(id) {
+            return self.loc_error(
+                line,
+                col,
+                format!("'{}' is already defined as a type or container", id),
+            );
+        }
+
         if let Some(scope) = self.current_scopes.last_mut() {
             if scope.contains_key(id) {
                 return self.loc_error(
@@ -184,12 +205,15 @@ impl<'a> Checker<'a> {
             );
         };
 
-        if module_table.registry.contains_key(id) {
+        if module_table.registry.contains_key(id)
+            || module_table.containers.contains_key(id)
+            || module_table.symbols.contains_key(id)
+        {
             return self.loc_error(
                 line,
                 col,
                 format!(
-                    "Static symbol '{}' is already defined in module {}",
+                    "Entry '{}' is already defined in module {}",
                     id,
                     path.display()
                 ),
@@ -200,32 +224,15 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    pub(super) fn resolve_symbol(&self, id: &str) -> Option<&Symbol<'a>> {
-        for scope in self.current_scopes.iter().rev() {
-            if let Some(symbol) = scope.get(id) {
-                return Some(symbol);
-            }
-        }
-        None
-    }
-
-    pub(super) fn resolve_symbol_mut(&mut self, id: &str) -> Option<&mut Symbol<'a>> {
-        for scope in self.current_scopes.iter_mut().rev() {
-            if let Some(symbol) = scope.get_mut(id) {
-                return Some(symbol);
-            }
-        }
-        None
-    }
-
-    pub(super) fn resolve_symbol_external(
-        &self,
-        id: &str,
+    pub(super) fn define_container(
+        &mut self,
         path: &Path,
+        id: &'a str,
+        container: Container<'a>,
         line: usize,
         col: usize,
-    ) -> Result<&Symbol<'a>, Error> {
-        let module_table = if let Some(m) = self.tables.get(path) {
+    ) -> Result<(), Error> {
+        let module_table = if let Some(m) = self.tables.get_mut(path) {
             m
         } else {
             return self.loc_error(
@@ -235,21 +242,73 @@ impl<'a> Checker<'a> {
             );
         };
 
-        let symbol = if let Some(s) = module_table.symbols.get(id) {
-            s
-        } else {
+        if module_table.containers.contains_key(id)
+            || module_table.registry.contains_key(id)
+            || module_table.symbols.contains_key(id)
+        {
             return self.loc_error(
                 line,
                 col,
-                format!("Symbol '{}' not found in module {}", id, path.display()),
+                format!(
+                    "Entry '{}' is already defined in module {}",
+                    id,
+                    path.display()
+                ),
             );
-        };
-
-        if matches!(symbol.visibility, Visibility::Priv) {
-            return self.loc_error(line, col, format!("Symbol '{}' is private", id));
         }
 
-        Ok(symbol)
+        module_table.containers.insert(id, container);
+        Ok(())
+    }
+
+    pub(super) fn resolve_symbol(
+        &self,
+        id: &str,
+        path: &Path,
+        line: usize,
+        col: usize,
+    ) -> Result<&Symbol<'a>, Error> {
+        let is_local = path == self.current_module;
+
+        if is_local {
+            for scope in self.current_scopes.iter().rev() {
+                if let Some(symbol) = scope.get(id) {
+                    return Ok(symbol);
+                }
+            }
+        } else {
+            let table = if let Some(m) = self.tables.get(path) {
+                m
+            } else {
+                return self.loc_error(
+                    line,
+                    col,
+                    format!("Module {} not found in registry", path.display()),
+                );
+            };
+
+            if let Some(symbol) = table.symbols.get(id) {
+                if matches!(symbol.visibility, Visibility::Priv) {
+                    return self.loc_error(line, col, format!("Symbol '{}' is private", id));
+                }
+                return Ok(symbol);
+            }
+        }
+
+        self.loc_error(
+            line,
+            col,
+            format!("Symbol '{}' not found in module '{}'", id, path.display()),
+        )
+    }
+
+    pub(super) fn resolve_symbol_mut(&mut self, id: &str) -> Option<&mut Symbol<'a>> {
+        for scope in self.current_scopes.iter_mut().rev() {
+            if let Some(symbol) = scope.get_mut(id) {
+                return Some(symbol);
+            }
+        }
+        None
     }
 
     pub(super) fn resolve_entry(
@@ -289,52 +348,52 @@ impl<'a> Checker<'a> {
     pub(super) fn resolve_entry_mut(
         &mut self,
         id: &str,
-        path: &Path,
         line: usize,
         col: usize,
     ) -> Result<&mut Entry<'a>, Error> {
-        let table = if let Some(m) = self.tables.get(path) {
+        let table = if let Some(m) = self.tables.get(self.current_module) {
             m
         } else {
             return self.loc_error(
                 line,
                 col,
-                format!("Module {} not found in registry", path.display()),
+                format!(
+                    "Module {} not found in registry",
+                    self.current_module.display()
+                ),
             );
         };
 
-        let entry = if let Some(e) = table.registry.get(id) {
-            e
-        } else {
+        if !table.registry.contains_key(id) {
             return self.loc_error(
                 line,
                 col,
-                format!("Entry '{}' not found in module {}", id, path.display()),
+                format!(
+                    "Container '{}' not found in module {}",
+                    id,
+                    self.current_module.display()
+                ),
             );
-        };
-
-        if self.current_module != path && matches!(entry.visibility, Visibility::Priv) {
-            return self.loc_error(line, col, format!("Entry '{}' is private", id));
         }
 
-        let entry_mut = self
+        let container_mut = self
             .tables
-            .get_mut(path)
+            .get_mut(self.current_module)
             .unwrap()
             .registry
             .get_mut(id)
             .unwrap();
 
-        Ok(entry_mut)
+        Ok(container_mut)
     }
 
-    pub(super) fn resolve_entry_external(
+    pub(super) fn resolve_container(
         &self,
         id: &str,
         path: &Path,
         line: usize,
         col: usize,
-    ) -> Result<&Entry<'a>, Error> {
+    ) -> Result<&Container<'a>, Error> {
         let module_table = if let Some(m) = self.tables.get(path) {
             m
         } else {
@@ -345,21 +404,63 @@ impl<'a> Checker<'a> {
             );
         };
 
-        let entry = if let Some(e) = module_table.registry.get(id) {
+        let container = if let Some(e) = module_table.containers.get(id) {
             e
         } else {
             return self.loc_error(
                 line,
                 col,
-                format!("Entry '{}' not found in module {}", id, path.display()),
+                format!("Container '{}' not found in module {}", id, path.display()),
             );
         };
 
-        if matches!(entry.visibility, Visibility::Priv) {
-            return self.loc_error(line, col, format!("Entry '{}' is private", id));
+        if self.current_module != path && matches!(container.visibility, Visibility::Priv) {
+            return self.loc_error(line, col, format!("Container '{}' is private", id));
         }
 
-        Ok(entry)
+        Ok(container)
+    }
+
+    pub(super) fn resolve_container_mut(
+        &mut self,
+        id: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<&mut Container<'a>, Error> {
+        let table = if let Some(m) = self.tables.get(self.current_module) {
+            m
+        } else {
+            return self.loc_error(
+                line,
+                col,
+                format!(
+                    "Module {} not found in registry",
+                    self.current_module.display()
+                ),
+            );
+        };
+
+        if !table.containers.contains_key(id) {
+            return self.loc_error(
+                line,
+                col,
+                format!(
+                    "Container '{}' not found in module {}",
+                    id,
+                    self.current_module.display()
+                ),
+            );
+        }
+
+        let container_mut = self
+            .tables
+            .get_mut(self.current_module)
+            .unwrap()
+            .containers
+            .get_mut(id)
+            .unwrap();
+
+        Ok(container_mut)
     }
 
     pub(super) fn loc_error<T>(&self, line: usize, col: usize, msg: String) -> Result<T, Error> {
@@ -476,46 +577,183 @@ impl<'a> Checker<'a> {
 
     fn fill_primitives(&self) -> HashMap<&'a str, Entry<'a>> {
         let primitives = [
-            "Bool",
-            "UInt8",
-            "UInt16",
-            "UInt32",
-            "UInt64",
-            "UInt128",
-            "Int8",
-            "Int16",
-            "Int32",
-            "Int64",
-            "Int128",
-            "URange8",
-            "URange16",
-            "URange32",
-            "URange64",
-            "URange128",
-            "Range8",
-            "Range16",
-            "Range32",
-            "Range64",
-            "Range128",
-            "Float32",
-            "Float64",
-            "Str",
-            "Ptr",
-            "Ref",
-            "Tuple",
-            "Array",
-            "Func",
-            "Node",
+            ("Bool", Type::Bool),
+            (
+                "UInt8",
+                Type::Integer {
+                    size: IntSize::B8,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "UInt16",
+                Type::Integer {
+                    size: IntSize::B16,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "UInt32",
+                Type::Integer {
+                    size: IntSize::B32,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "UInt64",
+                Type::Integer {
+                    size: IntSize::B64,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "UInt128",
+                Type::Integer {
+                    size: IntSize::B128,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "Int8",
+                Type::Integer {
+                    size: IntSize::B8,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Int16",
+                Type::Integer {
+                    size: IntSize::B16,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Int32",
+                Type::Integer {
+                    size: IntSize::B32,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Int64",
+                Type::Integer {
+                    size: IntSize::B64,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Int128",
+                Type::Integer {
+                    size: IntSize::B128,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "URange8",
+                Type::IntRange {
+                    size: IntSize::B8,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "URange16",
+                Type::IntRange {
+                    size: IntSize::B16,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "URange32",
+                Type::IntRange {
+                    size: IntSize::B32,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "URange64",
+                Type::IntRange {
+                    size: IntSize::B64,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "URange128",
+                Type::IntRange {
+                    size: IntSize::B128,
+                    sign: Sign::Unsigned,
+                },
+            ),
+            (
+                "Range8",
+                Type::IntRange {
+                    size: IntSize::B8,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Range16",
+                Type::IntRange {
+                    size: IntSize::B16,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Range32",
+                Type::IntRange {
+                    size: IntSize::B32,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Range64",
+                Type::IntRange {
+                    size: IntSize::B64,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Range128",
+                Type::IntRange {
+                    size: IntSize::B128,
+                    sign: Sign::Signed,
+                },
+            ),
+            (
+                "Float32",
+                Type::Float {
+                    size: FloatSize::B32,
+                },
+            ),
+            (
+                "Float64",
+                Type::Float {
+                    size: FloatSize::B64,
+                },
+            ),
+            ("Str", Type::String),
+            ("Ptr", Type::Pointer(Box::new(Type::Unknown))),
+            ("Ref", Type::Ref(Box::new(Type::Unknown))),
+            ("Tuple", Type::Tuple(Vec::new())),
+            ("Array", Type::Array(Box::new(Type::Unknown))),
+            (
+                "Func",
+                Type::Function {
+                    params: Vec::new(),
+                    return_ty: Box::new(Type::Unknown),
+                },
+            ),
+            ("Node", Type::Node(Box::new(Type::Unknown))),
         ];
 
         let mut registry = HashMap::new();
 
-        for ty in primitives {
+        for (name, formal_type) in primitives {
             registry.insert(
-                ty,
+                name,
                 Entry {
                     visibility: &Visibility::Pub,
                     symbols: HashMap::new(),
+                    ty: formal_type,
                 },
             );
         }

@@ -137,22 +137,16 @@ impl<'a> Checker<'a> {
     }
 
     fn check_identifier(&self, expr: &Expr<'a>, id: &'a str) -> Result<Type<'a>, Error> {
-        if let Some(s) = self.resolve_symbol(id) {
+        if let Ok(s) = self.resolve_symbol(id, self.current_module, expr.line, expr.col) {
             return Ok(s.ty.clone());
         }
 
-        if self
-            .resolve_entry(id, self.current_module, expr.line, expr.col)
-            .is_ok()
-        {
-            return Ok(Type::from_str(id));
+        if let Ok(entry) = self.resolve_entry(id, self.current_module, expr.line, expr.col) {
+            return Ok(entry.ty.clone());
         }
 
-        if self
-            .resolve_entry(id, self.prelude_module, expr.line, expr.col)
-            .is_ok()
-        {
-            return Ok(Type::from_str(id));
+        if let Ok(entry) = self.resolve_entry(id, self.prelude_module, expr.line, expr.col) {
+            return Ok(entry.ty.clone());
         }
 
         self.loc_error(
@@ -178,7 +172,7 @@ impl<'a> Checker<'a> {
             );
         }
 
-        let registry_id = target_ty.as_str();
+        let registry_id = target_ty.registry_id();
 
         if let ExprKind::Identifier(id) = target.kind
             && id == registry_id
@@ -227,20 +221,16 @@ impl<'a> Checker<'a> {
         let target_ty = self.check_expr(stmt, target)?;
 
         if let Type::Module(path) = target_ty {
-            if let Ok(symbol) = self.resolve_symbol_external(member, path, target.line, target.col)
-            {
+            if let Ok(symbol) = self.resolve_symbol(member, path, target.line, target.col) {
                 return Ok(symbol.ty.clone());
             }
 
-            if self
-                .resolve_entry_external(member, path, target.line, target.col)
-                .is_ok()
-            {
-                return Ok(Type::from_str(member));
+            if let Ok(entry) = self.resolve_entry(member, path, target.line, target.col) {
+                return Ok(entry.ty.clone());
             }
         }
 
-        let registry_id = target_ty.as_str();
+        let registry_id = target_ty.registry_id();
 
         if let ExprKind::Identifier(id) = target.kind
             && id != registry_id
@@ -359,10 +349,10 @@ impl<'a> Checker<'a> {
         id: &'a str,
         fields: &'a Vec<InstanceField<'a>>,
     ) -> Result<Type<'a>, Error> {
-        let mut members = self
-            .resolve_entry(id, self.current_module, expr.line, expr.col)?
-            .symbols
-            .clone();
+        let (mut members, return_ty) = {
+            let entry = self.resolve_entry(id, self.current_module, expr.line, expr.col)?;
+            (entry.symbols.clone(), entry.ty.clone())
+        };
 
         for field in fields {
             if let Some(member) = members.remove(field.id) {
@@ -392,7 +382,7 @@ impl<'a> Checker<'a> {
             return self.loc_error(expr.line, expr.col, format!("Missing field '{}'", name));
         }
 
-        Ok(Type::from_str(id))
+        Ok(return_ty)
     }
 
     fn check_call(

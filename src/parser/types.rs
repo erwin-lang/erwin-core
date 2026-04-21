@@ -194,9 +194,26 @@ impl<'a> Parser<'a> {
             }
             TokenKind::LParen => self.parse_tuple_type(),
             TokenKind::LSquare => self.parse_array_type(),
-            TokenKind::Identifier(id) => {
+            TokenKind::Identifier(left) => {
                 self.advance()?;
-                Ok(Type::Custom(id))
+
+                if matches!(self.peek(0)?.kind, TokenKind::DoubleDot) {
+                    self.advance()?;
+
+                    if let TokenKind::Identifier(right) = self.peek(0)?.kind {
+                        self.advance()?;
+
+                        return Ok(Type::Custom {
+                            module: Some(left),
+                            id: right,
+                        });
+                    }
+                }
+
+                Ok(Type::Custom {
+                    module: None,
+                    id: left,
+                })
             }
             _ => self.error("Invalid type"),
         }

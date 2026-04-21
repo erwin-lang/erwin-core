@@ -10,15 +10,16 @@ pub(crate) struct ModuleTable<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct Entry<'a> {
+pub(crate) struct Container<'a> {
     pub(crate) visibility: &'a Visibility,
-    pub(crate) symbols: HashMap<&'a str, Symbol<'a>>,
+    pub(crate) registry: Vec<&'a str>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Container<'a> {
+pub(crate) struct Entry<'a> {
+    pub(crate) ty: Type<'a>,
     pub(crate) visibility: &'a Visibility,
-    pub(crate) registry: HashMap<&'a str, Entry<'a>>,
+    pub(crate) symbols: HashMap<&'a str, Symbol<'a>>,
 }
 
 #[derive(Clone, Debug)]

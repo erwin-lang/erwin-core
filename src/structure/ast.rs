@@ -52,7 +52,7 @@ pub(crate) enum StatementKind<'a> {
     Container {
         visibility: Visibility,
         id: &'a str,
-        types: Vec<&'a str>,
+        types: Expr<'a>,
     },
     Method {
         id: &'a str,

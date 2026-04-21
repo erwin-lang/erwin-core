@@ -63,7 +63,6 @@ impl<'a> Parser<'a> {
                 self.advance()?;
                 let condition = Box::new(self.parse_expr()?);
 
-                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -95,7 +94,6 @@ impl<'a> Parser<'a> {
                 self.consume(TokenKind::In, "Expected 'in'")?;
                 let iter = Box::new(self.parse_expr()?);
 
-                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -121,7 +119,6 @@ impl<'a> Parser<'a> {
                 self.advance()?;
                 let condition = Box::new(self.parse_expr()?);
 
-                self.consume(TokenKind::Do, "Expected 'do'")?;
                 let do_body = Box::new(self.parse_expr()?);
 
                 let mut else_body = None;
@@ -600,54 +597,26 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::Identifier(id) => {
-                if matches!(self.peek(1)?.kind, TokenKind::LBrace) {
-                    let mut depth = 0;
-                    let mut offset = 1;
-                    let mut found_match = false;
+                self.advance()?;
 
-                    while let Ok(token) = self.peek(offset) {
-                        match token.kind {
-                            TokenKind::LBrace => depth += 1,
-                            TokenKind::RBrace => {
-                                depth -= 1;
-                                if depth == 0 {
-                                    found_match = true;
-                                    break;
-                                }
-                            }
-                            TokenKind::Eof => break,
-                            _ => {}
-                        }
-                        offset += 1;
-                    }
+                if matches!(self.peek(0)?.kind, TokenKind::LBrace) {
+                    self.advance()?;
 
-                    let is_state_instance = if found_match {
-                        matches!(self.peek(offset + 1)?.kind, TokenKind::Do)
+                    let fields = if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
+                        Vec::new()
                     } else {
-                        false
+                        self.parse_comma_separated(|p| p.parse_instance_field())?
                     };
 
-                    if is_state_instance {
-                        self.advance()?;
-                        self.advance()?;
+                    self.consume(TokenKind::RBrace, "Expected '}'")?;
 
-                        let fields = if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
-                            Vec::new()
-                        } else {
-                            self.parse_comma_separated(|p| p.parse_instance_field())?
-                        };
-
-                        self.consume(TokenKind::RBrace, "Expected '}'")?;
-
-                        return Ok(Expr {
-                            kind: ExprKind::StateInstance { id, fields },
-                            line: start_line,
-                            col: start_col,
-                        });
-                    }
+                    return Ok(Expr {
+                        kind: ExprKind::StateInstance { id, fields },
+                        line: start_line,
+                        col: start_col,
+                    });
                 }
 
-                self.advance()?;
                 Ok(Expr {
                     kind: ExprKind::Identifier(id),
                     line: start_line,
@@ -690,7 +659,9 @@ impl<'a> Parser<'a> {
                     col: start_col,
                 })
             }
-            TokenKind::LBrace => {
+            TokenKind::Do => {
+                self.advance()?;
+
                 let brace_line = self.peek(0)?.line;
                 let brace_col = self.peek(0)?.col;
                 let mut stmts = Vec::new();

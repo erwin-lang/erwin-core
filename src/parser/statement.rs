@@ -233,15 +233,11 @@ impl<'a> Parser<'a> {
             return self.error("Expected container name");
         };
 
-        self.consume(TokenKind::LBrace, "Expected '{'")?;
-        let types = self.parse_comma_separated(|p| {
-            if let TokenKind::Identifier(ty) = p.peek(0)?.kind {
-                Ok(ty)
-            } else {
-                p.error("Expected type name")
-            }
-        })?;
-        self.consume(TokenKind::RBrace, "Expected '}'")?;
+        let types = self.parse_expr()?;
+
+        if !matches!(types.kind, ExprKind::Block(_)) {
+            self.consume(TokenKind::Semicolon, "Expected ';'")?;
+        }
 
         Ok(Statement {
             kind: StatementKind::Container {

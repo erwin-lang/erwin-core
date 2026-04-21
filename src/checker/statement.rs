@@ -7,7 +7,7 @@ use crate::{
         ast::{
             Expr, ExprKind, Field, Param, Statement, StatementKind, VarKind, Variant, Visibility,
         },
-        symbols::{Entry, Symbol},
+        symbols::{Container, Entry, Symbol},
         types::Type,
     },
 };
@@ -57,8 +57,17 @@ impl<'a> Checker<'a> {
             StatementKind::Container {
                 visibility,
                 id,
-                types,
-            } => self.check_global_container(stmt, visibility, id, types),
+                types: _,
+            } => self.define_container(
+                self.current_module,
+                id,
+                Container {
+                    visibility,
+                    registry: Vec::new(),
+                },
+                stmt.line,
+                stmt.col,
+            ),
             StatementKind::Enum {
                 visibility,
                 id,
@@ -92,6 +101,11 @@ impl<'a> Checker<'a> {
                 ty,
                 body,
             } => self.check_func(stmt, id, params, ty, body),
+            StatementKind::Container {
+                visibility: _,
+                id,
+                types,
+            } => self.check_container(stmt, id, types),
             StatementKind::Method { id, methods } => self.check_method(id, methods),
             StatementKind::Expr(expr) => self.check_stmt_expr(stmt, expr),
             _ => Ok(()),
@@ -168,6 +182,7 @@ impl<'a> Checker<'a> {
         fields: &'a Vec<Field<'a>>,
     ) -> Result<(), Error> {
         let mut entry = Entry {
+            ty: Type::Custom { module: None, id },
             visibility,
             symbols: HashMap::new(),
         };
@@ -182,7 +197,7 @@ impl<'a> Checker<'a> {
             let member = Symbol {
                 ty: field.ty.clone(),
                 visibility,
-                is_static_member: true,
+                is_static_member: false,
                 is_mutable: true,
             };
 
@@ -190,16 +205,6 @@ impl<'a> Checker<'a> {
         }
 
         self.define_entry(self.current_module, id, entry, stmt.line, stmt.col)
-    }
-
-    fn check_global_container(
-        &mut self,
-        stmt: &Statement<'a>,
-        visibility: &'a Visibility,
-        id: &'a str,
-        types: &Vec<&str>,
-    ) -> Result<(), Error> {
-        Ok(()) // TODO: implement
     }
 
     fn check_global_enum(
@@ -210,17 +215,18 @@ impl<'a> Checker<'a> {
         variants: &Vec<Variant<'a>>,
     ) -> Result<(), Error> {
         let mut entry = Entry {
+            ty: Type::Custom { module: None, id },
             visibility,
             symbols: HashMap::new(),
         };
 
         for variant in variants {
             let variant_ty = if variant.data.is_empty() {
-                Type::Custom(id)
+                Type::Custom { module: None, id }
             } else {
                 Type::Function {
                     params: variant.data.clone(),
-                    return_ty: Box::new(Type::Custom(id)),
+                    return_ty: Box::new(Type::Custom { module: None, id }),
                 }
             };
 
@@ -244,9 +250,9 @@ impl<'a> Checker<'a> {
         id: &'a str,
         methods: &'a Expr<'a>,
     ) -> Result<(), Error> {
-        let entry = self.resolve_entry_mut(id, self.current_module, stmt.line, stmt.col)?;
-
-        if let ExprKind::Block(stmts) = &methods.kind {
+        if let Ok(entry) = self.resolve_entry_mut(id, stmt.line, stmt.col)
+            && let ExprKind::Block(stmts) = &methods.kind
+        {
             for stmt in stmts {
                 if let StatementKind::Func {
                     visibility,
@@ -264,7 +270,7 @@ impl<'a> Checker<'a> {
                             params: ty_params, ..
                         } = &mut final_ty
                     {
-                        ty_params.insert(0, Type::from_str(id));
+                        ty_params.insert(0, entry.ty.clone());
                     }
 
                     entry.symbols.insert(
@@ -278,9 +284,57 @@ impl<'a> Checker<'a> {
                     );
                 }
             }
+
+            return Ok(());
         }
 
-        Ok(())
+        if let Ok(container) = self.resolve_container_mut(id, stmt.line, stmt.col)
+            && let ExprKind::Block(stmts) = &methods.kind
+        {
+            for entry_id in container.registry.clone() {
+                let entry = self.resolve_entry_mut(entry_id, stmt.line, stmt.col)?;
+
+                for stmt in stmts {
+                    if let StatementKind::Func {
+                        visibility,
+                        id: f_id,
+                        params,
+                        ty,
+                        body: _,
+                    } = &stmt.kind
+                    {
+                        let is_static = params.first().is_none_or(|p| p.id != "self");
+                        let mut final_ty = ty.clone();
+
+                        if !is_static
+                            && let Type::Function {
+                                params: ty_params, ..
+                            } = &mut final_ty
+                        {
+                            ty_params.insert(0, entry.ty.clone());
+                        }
+
+                        entry.symbols.insert(
+                            f_id,
+                            Symbol {
+                                ty: final_ty,
+                                visibility,
+                                is_static_member: is_static,
+                                is_mutable: false,
+                            },
+                        );
+                    }
+                }
+            }
+
+            return Ok(());
+        }
+
+        self.loc_error(
+            stmt.line,
+            stmt.col,
+            format!("'{}' is neither a type or a container", id),
+        )
     }
 
     fn check_var(
@@ -359,11 +413,7 @@ impl<'a> Checker<'a> {
         };
 
         let value_ty = self.check_expr(stmt, value)?;
-        let symbol = if let Some(s) = self.resolve_symbol(var_id) {
-            s
-        } else {
-            return self.loc_error(var.line, var.col, "Symbol hasn't been declared".to_string());
-        };
+        let symbol = self.resolve_symbol(var_id, self.current_module, var.line, var.col)?;
 
         if !symbol.is_mutable {
             return self.loc_error(var.line, var.col, "Symbol is not mutable".to_string());
@@ -486,6 +536,55 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
+    fn check_container(
+        &mut self,
+        stmt: &Statement<'a>,
+        id: &'a str,
+        body: &Expr<'a>,
+    ) -> Result<(), Error> {
+        let mut entries = Vec::new();
+
+        match &body.kind {
+            ExprKind::Block(types) => {
+                for ty in types {
+                    if let StatementKind::Expr(expr) = &ty.kind {
+                        match &expr.kind {
+                            ExprKind::Identifier(ty) => {
+                                entries.push(*ty);
+                            }
+                            ExprKind::StaticAccess { member, .. } => {
+                                entries.push(*member);
+                            }
+                            _ => {
+                                return self.loc_error(
+                                    expr.line,
+                                    expr.col,
+                                    "Invalid container element".to_string(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                return self.loc_error(
+                    body.line,
+                    body.col,
+                    "Invalid container element".to_string(),
+                );
+            }
+        }
+
+        for entry in &entries {
+            self.resolve_entry(entry, self.current_module, body.line, body.col)?;
+        }
+
+        let container = self.resolve_container_mut(id, stmt.line, stmt.col)?;
+        container.registry.extend(entries);
+
+        Ok(())
+    }
+
     fn check_method(&mut self, id: &'a str, methods: &'a Expr<'a>) -> Result<(), Error> {
         if let ExprKind::Block(stmts) = &methods.kind {
             for stmt in stmts {
@@ -497,65 +596,96 @@ impl<'a> Checker<'a> {
                     ..
                 } = &stmt.kind
                 {
-                    let is_static = {
-                        let entry =
-                            self.resolve_entry(id, self.current_module, stmt.line, stmt.col)?;
+                    let mut target_types = Vec::new();
 
-                        if let Some(s) = entry.symbols.get(f_id) {
-                            s.is_static_member
-                        } else {
+                    if let Ok(entry) =
+                        self.resolve_entry(id, self.current_module, stmt.line, stmt.col)
+                    {
+                        let is_static = {
+                            if let Some(s) = entry.symbols.get(f_id) {
+                                s.is_static_member
+                            } else {
+                                return self.loc_error(
+                                    stmt.line,
+                                    stmt.col,
+                                    format!("Symbol '{}' not in registry", f_id),
+                                );
+                            }
+                        };
+
+                        target_types.push((entry.ty.clone(), is_static));
+                    } else if let Ok(container) =
+                        self.resolve_container(id, self.current_module, stmt.line, stmt.col)
+                    {
+                        for entry_id in container.registry.clone() {
+                            let entry = self.resolve_entry(
+                                entry_id,
+                                self.current_module,
+                                stmt.line,
+                                stmt.col,
+                            )?;
+                            let is_static = {
+                                if let Some(s) = entry.symbols.get(f_id) {
+                                    s.is_static_member
+                                } else {
+                                    return self.loc_error(
+                                        stmt.line,
+                                        stmt.col,
+                                        format!("Symbol '{}' not in registry", f_id),
+                                    );
+                                }
+                            };
+
+                            target_types.push((entry.ty.clone(), is_static));
+                        }
+                    }
+
+                    for (self_ty, is_static) in target_types {
+                        self.enter_scope();
+
+                        if !is_static {
+                            self.define_symbol(
+                                "self",
+                                Symbol {
+                                    ty: self_ty,
+                                    visibility: &Visibility::Priv,
+                                    is_static_member: false,
+                                    is_mutable: false,
+                                },
+                                stmt.line,
+                                stmt.col,
+                            )?;
+                        }
+
+                        for param in params {
+                            self.define_symbol(
+                                param.id,
+                                Symbol {
+                                    ty: param.ty.clone(),
+                                    visibility: &Visibility::Priv,
+                                    is_static_member: false,
+                                    is_mutable: false,
+                                },
+                                stmt.line,
+                                stmt.col,
+                            )?;
+                        }
+
+                        let body_ty = self.check_expr(stmt, body)?;
+
+                        if !self.is_assignable(ty, &body_ty) {
                             return self.loc_error(
                                 stmt.line,
                                 stmt.col,
-                                format!("Symbol '{}' not in registry", f_id),
+                                format!(
+                                    "Method '{}' defined for '{}' declared return type {:?} but body results in {:?}",
+                                    f_id, id, ty, body_ty
+                                ),
                             );
                         }
-                    };
 
-                    self.enter_scope();
-
-                    if !is_static {
-                        self.define_symbol(
-                            "self",
-                            Symbol {
-                                ty: Type::from_str(id),
-                                visibility: &Visibility::Priv,
-                                is_static_member: false,
-                                is_mutable: false,
-                            },
-                            stmt.line,
-                            stmt.col,
-                        )?;
+                        self.exit_local_scope(stmt.line, stmt.col)?;
                     }
-
-                    for param in params {
-                        self.define_symbol(
-                            param.id,
-                            Symbol {
-                                ty: param.ty.clone(),
-                                visibility: &Visibility::Priv,
-                                is_static_member: false,
-                                is_mutable: false,
-                            },
-                            stmt.line,
-                            stmt.col,
-                        )?;
-                    }
-
-                    let body_ty = self.check_expr(stmt, body)?;
-
-                    if !self.is_assignable(ty, &body_ty) {
-                        return self.loc_error(
-                            stmt.line,
-                            stmt.col,
-                            format!(
-                                "Method '{}' defined for '{}' declared return type {:?} but body results in {:?}",
-                                f_id, id, ty, body_ty
-                            ),
-                        );
-                    }
-
-                    self.exit_local_scope(stmt.line, stmt.col)?;
                 }
             }
         }
