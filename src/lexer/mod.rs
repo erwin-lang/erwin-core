@@ -18,7 +18,7 @@ impl<'a> Lexer<'a> {
             code,
             current: 0,
             line: 1,
-            column: 1,
+            column: 2,
         }
     }
 
@@ -53,7 +53,7 @@ impl<'a> Lexer<'a> {
         if let Some(c) = self.peek() {
             if c == '\n' {
                 self.line += 1;
-                self.column = 0;
+                self.column = 1;
             } else {
                 self.column += 1;
             }
