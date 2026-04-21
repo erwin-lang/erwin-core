@@ -250,16 +250,36 @@ impl<'a> Checker<'a> {
         id: &'a str,
         methods: &'a Expr<'a>,
     ) -> Result<(), Error> {
-        if let Ok(entry) = self.resolve_entry_mut(id, stmt.line, stmt.col)
-            && let ExprKind::Block(stmts) = &methods.kind
-        {
+        let ExprKind::Block(stmts) = &methods.kind else {
+            return Ok(());
+        };
+
+        let mut targets = Vec::new();
+
+        if self.resolve_entry_mut(id, stmt.line, stmt.col).is_ok() {
+            targets.push(id);
+        } else if let Ok(container) = self.resolve_container_mut(id, stmt.line, stmt.col) {
+            for entry_id in container.registry.clone() {
+                targets.push(entry_id);
+            }
+        } else {
+            return self.loc_error(
+                stmt.line,
+                stmt.col,
+                format!("'{}' is neither a type or a container", id),
+            );
+        }
+
+        for entry_id in targets {
+            let entry = self.resolve_entry_mut(entry_id, stmt.line, stmt.col)?;
+
             for stmt in stmts {
                 if let StatementKind::Func {
                     visibility,
                     id: f_id,
                     params,
                     ty,
-                    body: _,
+                    ..
                 } = &stmt.kind
                 {
                     let is_static = params.first().is_none_or(|p| p.id != "self");
@@ -284,57 +304,9 @@ impl<'a> Checker<'a> {
                     );
                 }
             }
-
-            return Ok(());
         }
 
-        if let Ok(container) = self.resolve_container_mut(id, stmt.line, stmt.col)
-            && let ExprKind::Block(stmts) = &methods.kind
-        {
-            for entry_id in container.registry.clone() {
-                let entry = self.resolve_entry_mut(entry_id, stmt.line, stmt.col)?;
-
-                for stmt in stmts {
-                    if let StatementKind::Func {
-                        visibility,
-                        id: f_id,
-                        params,
-                        ty,
-                        body: _,
-                    } = &stmt.kind
-                    {
-                        let is_static = params.first().is_none_or(|p| p.id != "self");
-                        let mut final_ty = ty.clone();
-
-                        if !is_static
-                            && let Type::Function {
-                                params: ty_params, ..
-                            } = &mut final_ty
-                        {
-                            ty_params.insert(0, entry.ty.clone());
-                        }
-
-                        entry.symbols.insert(
-                            f_id,
-                            Symbol {
-                                ty: final_ty,
-                                visibility,
-                                is_static_member: is_static,
-                                is_mutable: false,
-                            },
-                        );
-                    }
-                }
-            }
-
-            return Ok(());
-        }
-
-        self.loc_error(
-            stmt.line,
-            stmt.col,
-            format!("'{}' is neither a type or a container", id),
-        )
+        Ok(())
     }
 
     fn check_var(
@@ -489,10 +461,18 @@ impl<'a> Checker<'a> {
         let parent_returns = take(&mut self.returns);
 
         for param in params {
+            if param.id == "self" {
+                return self.loc_error(
+                    stmt.line,
+                    stmt.col,
+                    "Regular function cannot have self parameter".to_string(),
+                );
+            }
+
             self.define_symbol(
                 param.id,
                 Symbol {
-                    ty: param.ty.clone(),
+                    ty: param.ty.clone().unwrap(),
                     visibility: &Visibility::Priv,
                     is_static_member: false,
                     is_mutable: false,
@@ -601,19 +581,7 @@ impl<'a> Checker<'a> {
                     if let Ok(entry) =
                         self.resolve_entry(id, self.current_module, stmt.line, stmt.col)
                     {
-                        let is_static = {
-                            if let Some(s) = entry.symbols.get(f_id) {
-                                s.is_static_member
-                            } else {
-                                return self.loc_error(
-                                    stmt.line,
-                                    stmt.col,
-                                    format!("Symbol '{}' not in registry", f_id),
-                                );
-                            }
-                        };
-
-                        target_types.push((entry.ty.clone(), is_static));
+                        target_types.push(entry.ty.clone());
                     } else if let Ok(container) =
                         self.resolve_container(id, self.current_module, stmt.line, stmt.col)
                     {
@@ -624,44 +592,24 @@ impl<'a> Checker<'a> {
                                 stmt.line,
                                 stmt.col,
                             )?;
-                            let is_static = {
-                                if let Some(s) = entry.symbols.get(f_id) {
-                                    s.is_static_member
-                                } else {
-                                    return self.loc_error(
-                                        stmt.line,
-                                        stmt.col,
-                                        format!("Symbol '{}' not in registry", f_id),
-                                    );
-                                }
-                            };
 
-                            target_types.push((entry.ty.clone(), is_static));
+                            target_types.push(entry.ty.clone());
                         }
                     }
 
-                    for (self_ty, is_static) in target_types {
+                    for self_ty in &target_types {
                         self.enter_scope();
 
-                        if !is_static {
-                            self.define_symbol(
-                                "self",
-                                Symbol {
-                                    ty: self_ty,
-                                    visibility: &Visibility::Priv,
-                                    is_static_member: false,
-                                    is_mutable: false,
-                                },
-                                stmt.line,
-                                stmt.col,
-                            )?;
-                        }
-
                         for param in params {
+                            let param_ty = match &param.ty {
+                                Some(t) => t.clone(),
+                                None => self_ty.clone(),
+                            };
+
                             self.define_symbol(
                                 param.id,
                                 Symbol {
-                                    ty: param.ty.clone(),
+                                    ty: param_ty,
                                     visibility: &Visibility::Priv,
                                     is_static_member: false,
                                     is_mutable: false,

@@ -89,10 +89,14 @@ impl<'a> Parser<'a> {
             _ => return self.error("Expected parameter identifier"),
         };
 
+        if id == "self" {
+            return Ok(Param { id, ty: None });
+        }
+
         self.consume(TokenKind::Colon, "Expected ':'")?;
         let ty = self.parse_type()?;
 
-        Ok(Param { id, ty })
+        Ok(Param { id, ty: Some(ty) })
     }
 
     pub(super) fn parse_field(&mut self) -> Result<Field<'a>, Error> {

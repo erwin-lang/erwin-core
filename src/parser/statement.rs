@@ -162,14 +162,12 @@ impl<'a> Parser<'a> {
         };
 
         self.consume(TokenKind::LParen, "Expected '('")?;
-
         let params = self.parse_comma_separated(|p| p.parse_param())?;
-
         self.consume(TokenKind::RParen, "Expected ')'")?;
         self.consume(TokenKind::RArrow, "Expected '->'")?;
 
         let ty = Type::Function {
-            params: params.iter().map(|p| p.ty.clone()).collect(),
+            params: params.iter().map(|p| p.ty.clone().unwrap()).collect(),
             return_ty: Box::new(self.parse_type()?),
         };
 

@@ -81,7 +81,7 @@ pub(crate) enum Visibility {
 #[derive(Clone, Debug)]
 pub(crate) struct Param<'a> {
     pub(crate) id: &'a str,
-    pub(crate) ty: Type<'a>,
+    pub(crate) ty: Option<Type<'a>>,
 }
 
 #[derive(Clone, Debug)]

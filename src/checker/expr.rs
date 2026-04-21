@@ -686,10 +686,18 @@ impl<'a> Checker<'a> {
         let parent_returns = take(&mut self.returns);
 
         for param in params {
+            if param.id == "self" {
+                return self.loc_error(
+                    expr.line,
+                    expr.col,
+                    "Lambda expression cant have self parameter".to_string(),
+                );
+            }
+
             self.define_symbol(
                 param.id,
                 Symbol {
-                    ty: param.ty.clone(),
+                    ty: param.ty.clone().unwrap(),
                     visibility: &Visibility::Priv,
                     is_static_member: false,
                     is_mutable: false,
@@ -715,7 +723,7 @@ impl<'a> Checker<'a> {
         self.exit_local_scope(expr.line, expr.col)?;
 
         Ok(Type::Function {
-            params: params.iter().map(|p| p.ty.clone()).collect(),
+            params: params.iter().map(|p| p.ty.clone().unwrap()).collect(),
             return_ty: Box::new(ty),
         })
     }
