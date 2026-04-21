@@ -125,6 +125,7 @@ impl<'a> Lexer<'a> {
             "container" => TokenKind::Container,
             "enum" => TokenKind::Enum,
             "method" => TokenKind::Method,
+            "alias" => TokenKind::Alias,
             "func" => TokenKind::Func,
             "return" => TokenKind::Return,
             "yield" => TokenKind::Yield,
