@@ -7,6 +7,7 @@ use crate::{
     structure::{
         ast::{Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility},
         token::{Token, TokenKind},
+        types::Type,
     },
 };
 
@@ -90,13 +91,16 @@ impl<'a> Parser<'a> {
         };
 
         if id == "self" {
-            return Ok(Param { id, ty: None });
+            return Ok(Param {
+                id,
+                ty: Type::Unknown,
+            });
         }
 
         self.consume(TokenKind::Colon, "Expected ':'")?;
         let ty = self.parse_type()?;
 
-        Ok(Param { id, ty: Some(ty) })
+        Ok(Param { id, ty })
     }
 
     pub(super) fn parse_field(&mut self) -> Result<Field<'a>, Error> {

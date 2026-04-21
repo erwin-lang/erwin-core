@@ -26,6 +26,7 @@ pub(crate) struct Checker<'a> {
     pub(super) current_module: &'a Path,
     pub(super) current_scopes: Vec<HashMap<&'a str, Symbol<'a>>>,
     pub(super) returns: Vec<Type<'a>>,
+    pub(super) type_aliases: HashMap<&'a str, Type<'a>>,
 }
 
 impl<'a> Checker<'a> {
@@ -45,6 +46,7 @@ impl<'a> Checker<'a> {
             current_module: main_module,
             current_scopes: Vec::new(),
             returns: Vec::new(),
+            type_aliases: HashMap::new(),
         }
     }
 
@@ -573,6 +575,18 @@ impl<'a> Checker<'a> {
         }
 
         self.loc_error(line, col, "Types are not comparable".to_string())
+    }
+
+    pub(super) fn resolve_alias(&self, ty: &Type<'a>) -> Type<'a> {
+        let Type::Custom { id, .. } = ty else {
+            return ty.clone();
+        };
+
+        if let Some(real_ty) = self.type_aliases.get(id) {
+            return self.resolve_alias(real_ty);
+        }
+
+        ty.clone()
     }
 
     fn fill_primitives(&self) -> HashMap<&'a str, Entry<'a>> {

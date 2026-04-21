@@ -74,6 +74,7 @@ impl<'a> Checker<'a> {
                 variants,
             } => self.check_global_enum(stmt, visibility, id, variants),
             StatementKind::Method { id, methods } => self.check_global_method(stmt, id, methods),
+            StatementKind::Alias { alias_id, ty } => self.check_global_alias(stmt, alias_id, ty),
             _ => Ok(()),
         }
     }
@@ -106,7 +107,7 @@ impl<'a> Checker<'a> {
                 id,
                 types,
             } => self.check_container(stmt, id, types),
-            StatementKind::Method { id, methods } => self.check_method(id, methods),
+            StatementKind::Method { id, methods } => self.check_method(stmt, id, methods),
             StatementKind::Expr(expr) => self.check_stmt_expr(stmt, expr),
             _ => Ok(()),
         }
@@ -181,6 +182,14 @@ impl<'a> Checker<'a> {
         id: &'a str,
         fields: &'a Vec<Field<'a>>,
     ) -> Result<(), Error> {
+        if self.current_scopes.len() != 1 {
+            return self.loc_error(
+                stmt.line,
+                stmt.col,
+                "State blocks must be defined in the global scope of a module".to_string(),
+            );
+        }
+
         let mut entry = Entry {
             ty: Type::Custom { module: None, id },
             visibility,
@@ -214,6 +223,14 @@ impl<'a> Checker<'a> {
         id: &'a str,
         variants: &Vec<Variant<'a>>,
     ) -> Result<(), Error> {
+        if self.current_scopes.len() != 1 {
+            return self.loc_error(
+                stmt.line,
+                stmt.col,
+                "Enums must be defined in the global scope of a module".to_string(),
+            );
+        }
+
         let mut entry = Entry {
             ty: Type::Custom { module: None, id },
             visibility,
@@ -244,7 +261,26 @@ impl<'a> Checker<'a> {
         self.define_entry(self.current_module, id, entry, stmt.line, stmt.col)
     }
 
-    pub(super) fn check_global_method(
+    fn check_global_alias(
+        &mut self,
+        stmt: &Statement<'a>,
+        alias_id: &'a str,
+        ty: &'a Type<'a>,
+    ) -> Result<(), Error> {
+        if alias_id == "Self" {
+            return self.loc_error(
+                stmt.line,
+                stmt.col,
+                "'Self' is a reserved type alias".to_string(),
+            );
+        }
+
+        self.type_aliases.insert(alias_id, ty.clone());
+
+        Ok(())
+    }
+
+    fn check_global_method(
         &mut self,
         stmt: &Statement<'a>,
         id: &'a str,
@@ -315,22 +351,24 @@ impl<'a> Checker<'a> {
         visibility: &'a Visibility,
         kind: &VarKind,
         id: &'a str,
-        ty: &Option<Type<'a>>,
+        ty: &'a Option<Type<'a>>,
         value: &'a Expr<'a>,
     ) -> Result<(), Error> {
         let val_ty = self.check_expr(stmt, value)?;
         let final_ty = if let Some(explicit_ty) = ty {
-            if !self.is_assignable(explicit_ty, &val_ty) {
+            let resolved_ty = self.resolve_alias(explicit_ty);
+
+            if !self.is_assignable(&resolved_ty, &val_ty) {
                 return self.loc_error(
                     stmt.line,
                     stmt.col,
                     format!(
                         "Type mismatch: Expected {:?}, found {:?}",
-                        explicit_ty, val_ty
+                        resolved_ty, val_ty
                     ),
                 );
             }
-            explicit_ty.clone()
+            resolved_ty
         } else {
             val_ty
         };
@@ -472,7 +510,7 @@ impl<'a> Checker<'a> {
             self.define_symbol(
                 param.id,
                 Symbol {
-                    ty: param.ty.clone().unwrap(),
+                    ty: param.ty.clone(),
                     visibility: &Visibility::Priv,
                     is_static_member: false,
                     is_mutable: false,
@@ -522,6 +560,14 @@ impl<'a> Checker<'a> {
         id: &'a str,
         body: &Expr<'a>,
     ) -> Result<(), Error> {
+        if self.current_scopes.len() != 1 {
+            return self.loc_error(
+                stmt.line,
+                stmt.col,
+                "Type containers be defined in the global scope of a module".to_string(),
+            );
+        }
+
         let mut entries = Vec::new();
 
         match &body.kind {
@@ -565,7 +611,20 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    fn check_method(&mut self, id: &'a str, methods: &'a Expr<'a>) -> Result<(), Error> {
+    fn check_method(
+        &mut self,
+        stmt: &Statement<'a>,
+        id: &'a str,
+        methods: &'a Expr<'a>,
+    ) -> Result<(), Error> {
+        if self.current_scopes.len() != 1 {
+            return self.loc_error(
+                stmt.line,
+                stmt.col,
+                "Type containers be defined in the global scope of a module".to_string(),
+            );
+        }
+
         if let ExprKind::Block(stmts) = &methods.kind {
             for stmt in stmts {
                 if let StatementKind::Func {
@@ -597,19 +656,21 @@ impl<'a> Checker<'a> {
                         }
                     }
 
-                    for self_ty in &target_types {
+                    for target_ty in target_types {
                         self.enter_scope();
+                        let self_ty = self.type_aliases.insert("Self", target_ty).unwrap();
+                        let parent_returns = take(&mut self.returns);
 
                         for param in params {
-                            let param_ty = match &param.ty {
-                                Some(t) => t.clone(),
-                                None => self_ty.clone(),
+                            let param_ty = match param.id {
+                                "self" => &self_ty,
+                                _ => &param.ty,
                             };
 
                             self.define_symbol(
                                 param.id,
                                 Symbol {
-                                    ty: param_ty,
+                                    ty: param_ty.clone(),
                                     visibility: &Visibility::Priv,
                                     is_static_member: false,
                                     is_mutable: false,
@@ -620,18 +681,35 @@ impl<'a> Checker<'a> {
                         }
 
                         let body_ty = self.check_expr(stmt, body)?;
+                        let returns = take(&mut self.returns);
+                        let mut final_ty = if matches!(body_ty, Type::Done) {
+                            Type::Unknown
+                        } else {
+                            body_ty
+                        };
 
-                        if !self.is_assignable(ty, &body_ty) {
+                        for ret_ty in &returns {
+                            final_ty = self.join_ty(&final_ty, ret_ty, stmt.line, stmt.col)?;
+                        }
+
+                        let expected_ret_ty = match ty {
+                            Type::Function { return_ty, .. } => &(**return_ty),
+                            _ => ty,
+                        };
+
+                        if !self.is_assignable(expected_ret_ty, &final_ty) {
                             return self.loc_error(
                                 stmt.line,
                                 stmt.col,
                                 format!(
-                                    "Method '{}' defined for '{}' declared return type {:?} but body results in {:?}",
-                                    f_id, id, ty, body_ty
+                                    "Method '{}' in type '{:?}' expected type '{:?}' but it's body returned '{:?}'",
+                                    f_id, id, expected_ret_ty, final_ty
                                 ),
                             );
                         }
 
+                        self.returns = parent_returns;
+                        self.type_aliases.remove("Self");
                         self.exit_local_scope(stmt.line, stmt.col)?;
                     }
                 }

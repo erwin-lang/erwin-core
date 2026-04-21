@@ -43,6 +43,7 @@ pub(crate) enum TokenKind<'a> {
     False,     // Boolean false
     Pub,       // Public visibility modifier
     Import,    // Import another module
+    Alias,     // Type alias
 
     // Primitive types
     Bool,

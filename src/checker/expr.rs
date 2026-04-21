@@ -149,6 +149,10 @@ impl<'a> Checker<'a> {
             return Ok(entry.ty.clone());
         }
 
+        if let Some(alias) = self.type_aliases.get(id) {
+            return Ok(alias.clone());
+        }
+
         self.loc_error(
             expr.line,
             expr.col,
@@ -697,7 +701,7 @@ impl<'a> Checker<'a> {
             self.define_symbol(
                 param.id,
                 Symbol {
-                    ty: param.ty.clone().unwrap(),
+                    ty: self.resolve_alias(&param.ty),
                     visibility: &Visibility::Priv,
                     is_static_member: false,
                     is_mutable: false,
@@ -723,7 +727,7 @@ impl<'a> Checker<'a> {
         self.exit_local_scope(expr.line, expr.col)?;
 
         Ok(Type::Function {
-            params: params.iter().map(|p| p.ty.clone().unwrap()).collect(),
+            params: params.iter().map(|p| self.resolve_alias(&p.ty)).collect(),
             return_ty: Box::new(ty),
         })
     }

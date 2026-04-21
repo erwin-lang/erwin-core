@@ -63,6 +63,10 @@ pub(crate) enum StatementKind<'a> {
         id: &'a str,
         variants: Vec<Variant<'a>>,
     },
+    Alias {
+        alias_id: &'a str,
+        ty: Type<'a>,
+    },
     Expr(Expr<'a>),
 }
 
@@ -81,7 +85,7 @@ pub(crate) enum Visibility {
 #[derive(Clone, Debug)]
 pub(crate) struct Param<'a> {
     pub(crate) id: &'a str,
-    pub(crate) ty: Option<Type<'a>>,
+    pub(crate) ty: Type<'a>,
 }
 
 #[derive(Clone, Debug)]

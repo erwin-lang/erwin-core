@@ -22,6 +22,7 @@ impl<'a> Parser<'a> {
             TokenKind::Container => self.parse_container(Visibility::Priv),
             TokenKind::Enum => self.parse_enum(Visibility::Priv),
             TokenKind::Method => self.parse_method(),
+            TokenKind::Alias => self.parse_alias(),
             _ => self.parse_statement_expr(),
         }
     }
@@ -167,7 +168,7 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::RArrow, "Expected '->'")?;
 
         let ty = Type::Function {
-            params: params.iter().map(|p| p.ty.clone().unwrap()).collect(),
+            params: params.iter().map(|p| p.ty.clone()).collect(),
             return_ty: Box::new(self.parse_type()?),
         };
 
@@ -313,6 +314,30 @@ impl<'a> Parser<'a> {
 
         Ok(Statement {
             kind: StatementKind::Method { id, methods },
+            line: start_line,
+            col: start_col,
+        })
+    }
+
+    fn parse_alias(&mut self) -> Result<Statement<'a>, Error> {
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+
+        self.advance()?;
+
+        let TokenKind::Identifier(alias_id) = self.peek(0)?.kind else {
+            return self.error("Expected type alias");
+        };
+
+        self.advance()?;
+        self.consume(TokenKind::Assign, "Expected '='")?;
+
+        let ty = self.parse_type()?;
+
+        self.consume(TokenKind::Semicolon, "Expected ';'")?;
+
+        Ok(Statement {
+            kind: StatementKind::Alias { alias_id, ty },
             line: start_line,
             col: start_col,
         })
