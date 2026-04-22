@@ -558,7 +558,7 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &Statement<'a>,
         id: &'a str,
-        body: &Expr<'a>,
+        body: &Vec<Expr<'a>>,
     ) -> Result<(), Error> {
         if self.current_scopes.len() != 1 {
             return self.loc_error(
@@ -570,39 +570,26 @@ impl<'a> Checker<'a> {
 
         let mut entries = Vec::new();
 
-        match &body.kind {
-            ExprKind::Block(types) => {
-                for ty in types {
-                    if let StatementKind::Expr(expr) = &ty.kind {
-                        match &expr.kind {
-                            ExprKind::Identifier(ty) => {
-                                entries.push(*ty);
-                            }
-                            ExprKind::StaticAccess { member, .. } => {
-                                entries.push(*member);
-                            }
-                            _ => {
-                                return self.loc_error(
-                                    expr.line,
-                                    expr.col,
-                                    "Invalid container element".to_string(),
-                                );
-                            }
-                        }
-                    }
+        for expr in body {
+            match &expr.kind {
+                ExprKind::Identifier(ty) => {
+                    entries.push(*ty);
                 }
-            }
-            _ => {
-                return self.loc_error(
-                    body.line,
-                    body.col,
-                    "Invalid container element".to_string(),
-                );
+                ExprKind::StaticAccess { member, .. } => {
+                    entries.push(*member);
+                }
+                _ => {
+                    return self.loc_error(
+                        expr.line,
+                        expr.col,
+                        "Invalid container element".to_string(),
+                    );
+                }
             }
         }
 
         for entry in &entries {
-            self.resolve_entry(entry, self.current_module, body.line, body.col)?;
+            self.resolve_entry(entry, self.current_module, stmt.line, stmt.col)?;
         }
 
         let container = self.resolve_container_mut(id, stmt.line, stmt.col)?;

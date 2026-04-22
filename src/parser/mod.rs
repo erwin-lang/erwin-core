@@ -159,6 +159,19 @@ impl<'a> Parser<'a> {
         Ok(Variant { id, data })
     }
 
+    pub(super) fn parse_container_type(&mut self) -> Result<Expr<'a>, Error> {
+        let expr = self.parse_expr()?;
+
+        if !matches!(
+            expr.kind,
+            ExprKind::Identifier(_) | ExprKind::StaticAccess { .. }
+        ) {
+            return self.loc_error(expr.line, expr.col, "Expected type");
+        }
+
+        Ok(expr)
+    }
+
     pub(super) fn is_brace_terminated(&self, expr: &Expr<'a>) -> bool {
         match &expr.kind {
             ExprKind::If {
