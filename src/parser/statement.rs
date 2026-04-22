@@ -232,7 +232,9 @@ impl<'a> Parser<'a> {
             return self.error("Expected container name");
         };
 
+        self.consume(TokenKind::LBrace, "Expected '{'")?;
         let types = self.parse_comma_separated(|p| p.parse_container_type())?;
+        self.consume(TokenKind::RBrace, "Expected '}'")?;
 
         Ok(Statement {
             kind: StatementKind::Container {
