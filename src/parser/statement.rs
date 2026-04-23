@@ -1,10 +1,9 @@
 use crate::{
-    error::Error,
+    error::{Error, loc_error},
     parser::Parser,
     structure::{
         ast::{ExprKind, Statement, StatementKind, VarKind, Visibility},
         token::TokenKind,
-        types::Type,
     },
 };
 
@@ -286,7 +285,7 @@ impl<'a> Parser<'a> {
         if let ExprKind::Block(stmts) = &methods.kind {
             for stmt in stmts {
                 if !matches!(stmt.kind, StatementKind::Func { .. }) {
-                    return self.loc_error(
+                    return loc_error(
                         methods_line,
                         methods_col,
                         "Method statements must be functions",
@@ -294,7 +293,7 @@ impl<'a> Parser<'a> {
                 }
             }
         } else {
-            return self.loc_error(
+            return loc_error(
                 methods_line,
                 methods_col,
                 "Method body must be a block expression",

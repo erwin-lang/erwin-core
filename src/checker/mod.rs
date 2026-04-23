@@ -474,10 +474,6 @@ impl<'a> Checker<'a> {
         Ok(container)
     }
 
-    pub(super) fn loc_error<T>(&self, line: usize, col: usize, msg: String) -> Result<T, Error> {
-        Err(Error::Custom(format!("[{}, {}] {}", line, col, msg)))
-    }
-
     pub(super) fn is_literal(&self, expr: &ExprKind<'a>) -> bool {
         match expr {
             ExprKind::Number(_) | ExprKind::String(_) | ExprKind::Bool(_) => true,

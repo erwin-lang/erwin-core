@@ -1,11 +1,6 @@
-use std::{
-    collections::{HashMap, HashSet},
-    env::args,
-    fs::write,
-    path::Path,
-};
+use std::{env::args, fs::write, path::Path};
 
-use crate::{checker::Checker, error::Error, resolver::resolve_imports};
+use crate::{checker::Checker, error::Error, resolver::Resolver};
 
 mod checker;
 mod error;
@@ -24,17 +19,7 @@ fn main() -> Result<(), Error> {
     let prelude_module = std_path.join("prelude.erw").canonicalize()?;
     let main_module = Path::new(&args[1]).canonicalize()?;
 
-    let mut loaded_modules = HashSet::new();
-    let mut registry = HashMap::new();
-
-    resolve_imports(
-        &std_path,
-        &main_module,
-        &main_module,
-        &mut loaded_modules,
-        &mut registry,
-    )?;
-
+    let registry = Resolver::new(&std_path, &main_module).resolve()?;
     let symbol_table = Checker::new(&std_path, &prelude_module, &main_module, &registry).check()?;
 
     // TEST: let's save the AST tree and the symbol table to check them!

@@ -9,27 +9,34 @@ use crate::{
 use std::{
     collections::{HashMap, HashSet},
     fs::read_to_string,
+    mem::take,
     path::PathBuf,
 };
 
 pub(crate) struct Resolver<'a> {
-    std_path: PathBuf,
-    main_path: PathBuf,
+    std_path: &'a Path,
+    main_module: &'a Path,
     loaded_modules: HashSet<PathBuf>,
     registry: HashMap<PathBuf, Vec<Statement<'a>>>,
 }
 
 impl<'a> Resolver<'a> {
-    pub(crate) fn new(std_path: PathBuf, main_path: PathBuf) -> Self {
+    pub(crate) fn new(std_path: &'a Path, main_module: &'a Path) -> Self {
         Self {
             std_path,
-            main_path,
+            main_module,
             loaded_modules: HashSet::new(),
             registry: HashMap::new(),
         }
     }
 
-    pub(crate) fn resolve(&mut self, module_path: PathBuf) -> Result<(), Error> {
+    pub(crate) fn resolve(&mut self) -> Result<HashMap<PathBuf, Vec<Statement<'a>>>, Error> {
+        self.resolve_imports(self.main_module)?;
+
+        Ok(take(&mut self.registry))
+    }
+
+    fn resolve_imports(&mut self, module_path: &Path) -> Result<(), Error> {
         let canonical_path = module_path.canonicalize()?;
 
         if self.loaded_modules.contains(&canonical_path) {
@@ -54,7 +61,7 @@ impl<'a> Resolver<'a> {
                         .unwrap_or(Path::new("."))
                         .to_path_buf(),
                     Some(_) => self
-                        .main_path
+                        .main_module
                         .parent()
                         .unwrap_or(Path::new("."))
                         .to_path_buf(),
@@ -66,7 +73,7 @@ impl<'a> Resolver<'a> {
                 }
 
                 next_path.set_extension("erw");
-                self.resolve(next_path)?;
+                self.resolve_imports(&next_path)?;
             }
 
             self.registry.get_mut(&canonical_path).unwrap().push(stmt);

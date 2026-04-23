@@ -1,5 +1,5 @@
 use crate::{
-    error::Error,
+    error::{Error, loc_error},
     lexer::Lexer,
     structure::token::{Token, TokenKind},
 };
@@ -93,12 +93,9 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Ok(Token::new(TokenKind::Slash, self.line, self.column))
                 }
-                _ => Err(Error::Custom(format!(
-                    "[{}, {}] Unexpected token",
-                    self.line, self.column
-                ))),
+                _ => loc_error(self.line, self.column, "Unexpected token"),
             },
-            None => Err(Error::Custom("Unexpected end of file".to_string())),
+            None => loc_error(self.line, self.column, "Unexpected end of file"),
         }
     }
 
@@ -232,10 +229,7 @@ impl<'a> Lexer<'a> {
         }
 
         if self.is_at_end() {
-            return Err(Error::Custom(format!(
-                "[{}, {}] Unterminated string literal",
-                start_line, start_col
-            )));
+            return loc_error(start_line, start_col, "Unterminated string literal");
         }
 
         let value = &self.code[start_index..self.current];
@@ -264,10 +258,7 @@ impl<'a> Lexer<'a> {
         }
 
         if self.is_at_end() {
-            return Err(Error::Custom(format!(
-                "[{}, {}] Unterminated string literal",
-                start_line, start_col
-            )));
+            return loc_error(start_line, start_col, "Unterminated string literal");
         }
 
         let value = &self.code[start_index..self.current];
@@ -299,10 +290,7 @@ impl<'a> Lexer<'a> {
 
         match fallback {
             Some(f) => Ok(Token::new(f, start_line, start_col)),
-            None => Err(Error::Custom(format!(
-                "[{}, {}] Unexpected token",
-                start_line, start_col
-            ))),
+            None => loc_error(start_line, start_col, "Unexpected token"),
         }
     }
 }
