@@ -7,7 +7,6 @@ use crate::{
         ast::{
             Expr, ExprKind, Field, Param, Statement, StatementKind, VarKind, Variant, Visibility,
         },
-        registry_ids::RegistryId,
         symbols::{Container, Entry, Symbol},
         types::Type,
     },
@@ -118,7 +117,7 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &'a Statement<'a>,
         alias: &'a Option<&str>,
-        path: &'a Vec<&str>,
+        path: &'a Expr<'a>,
     ) -> Result<(), Error> {
         if self.current_scopes.len() != 1 {
             return self.loc_error(
@@ -266,7 +265,7 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &Statement<'a>,
         alias_id: &'a str,
-        ty: &'a Type<'a>,
+        ty: &'a Expr<'a>,
     ) -> Result<(), Error> {
         if alias_id == "Self" {
             return self.loc_error(
@@ -352,7 +351,7 @@ impl<'a> Checker<'a> {
         visibility: &'a Visibility,
         kind: &VarKind,
         id: &'a str,
-        ty: &'a Option<Type<'a>>,
+        ty: &'a Option<Expr<'a>>,
         value: &'a Expr<'a>,
     ) -> Result<(), Error> {
         let val_ty = self.check_expr(stmt, value)?;
@@ -447,7 +446,7 @@ impl<'a> Checker<'a> {
     fn check_node(
         &mut self,
         stmt: &'a Statement<'a>,
-        ty: &Type<'a>,
+        ty: &Expr<'a>,
         value: &'a Expr<'a>,
     ) -> Result<(), Error> {
         if self.current_scopes.len() != 1 {
@@ -485,7 +484,7 @@ impl<'a> Checker<'a> {
         stmt: &'a Statement<'a>,
         id: &'a str,
         params: &Vec<Param<'a>>,
-        ty: &Type<'a>,
+        ty: &Expr<'a>,
         body: &'a Expr<'a>,
     ) -> Result<(), Error> {
         if self.current_scopes.len() != 1 {
@@ -559,7 +558,7 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &Statement<'a>,
         id: &'a str,
-        body: &Vec<RegistryId<'a>>,
+        body: &Vec<Expr<'a>>,
     ) -> Result<(), Error> {
         if self.current_scopes.len() != 1 {
             return self.loc_error(

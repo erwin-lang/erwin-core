@@ -32,3 +32,7 @@ impl Debug for Error {
         write!(f, "{}", self)
     }
 }
+
+pub(crate) fn loc_error<T>(line: usize, col: usize, msg: &str) -> Result<T, Error> {
+    Err(Error::Custom(format!("[{}, {}] {}", line, col, msg)))
+}

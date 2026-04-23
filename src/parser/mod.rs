@@ -2,7 +2,7 @@ pub(super) mod expr;
 pub(super) mod statement;
 
 use crate::{
-    error::Error,
+    error::{Error, loc_error},
     structure::{
         ast::{Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility},
         token::{Token, TokenKind},
@@ -204,10 +204,6 @@ impl<'a> Parser<'a> {
 
     pub(super) fn error<T>(&self, msg: &str) -> Result<T, Error> {
         let token = self.peek(0)?;
-        self.loc_error(token.line, token.col, msg)
-    }
-
-    pub(super) fn loc_error<T>(&self, line: usize, col: usize, msg: &str) -> Result<T, Error> {
-        Err(Error::Custom(format!("[{}, {}] {}", line, col, msg)))
+        loc_error(token.line, token.col, msg)
     }
 }
