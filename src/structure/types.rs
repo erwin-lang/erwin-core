@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::structure::registry_ids::RegistryId;
+
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Type<'a> {
     // User accessible types
@@ -25,10 +27,7 @@ pub(crate) enum Type<'a> {
         return_ty: Box<Type<'a>>,
     },
     Node(Box<Type<'a>>),
-    Custom {
-        module: Option<&'a str>,
-        id: &'a str,
-    },
+    Custom(&'a str),
 
     // Special builtin types
     Module(&'a Path),
@@ -59,103 +58,103 @@ pub(crate) enum FloatSize {
 }
 
 impl<'a> Type<'a> {
-    pub(crate) fn registry_id(&self) -> &'a str {
+    pub(crate) fn registry_id(&self) -> Option<RegistryId> {
         match self {
-            Type::Bool => "Bool",
+            Type::Bool => Some(RegistryId::Bool),
             Type::Integer {
                 size: IntSize::B8,
                 sign: Sign::Unsigned,
-            } => "UInt8",
+            } => Some(RegistryId::UInt8),
             Type::Integer {
                 size: IntSize::B16,
                 sign: Sign::Unsigned,
-            } => "UInt16",
+            } => Some(RegistryId::UInt16),
             Type::Integer {
                 size: IntSize::B32,
                 sign: Sign::Unsigned,
-            } => "UInt32",
+            } => Some(RegistryId::UInt32),
             Type::Integer {
                 size: IntSize::B64,
                 sign: Sign::Unsigned,
-            } => "UInt64",
+            } => Some(RegistryId::UInt64),
             Type::Integer {
                 size: IntSize::B128,
                 sign: Sign::Unsigned,
-            } => "UInt128",
+            } => Some(RegistryId::UInt128),
             Type::Integer {
                 size: IntSize::B8,
                 sign: Sign::Signed,
-            } => "Int8",
+            } => Some(RegistryId::Int8),
             Type::Integer {
                 size: IntSize::B16,
                 sign: Sign::Signed,
-            } => "Int16",
+            } => Some(RegistryId::Int16),
             Type::Integer {
                 size: IntSize::B32,
                 sign: Sign::Signed,
-            } => "Int32",
+            } => Some(RegistryId::Int32),
             Type::Integer {
                 size: IntSize::B64,
                 sign: Sign::Signed,
-            } => "Int64",
+            } => Some(RegistryId::Int64),
             Type::Integer {
                 size: IntSize::B128,
                 sign: Sign::Signed,
-            } => "Int128",
+            } => Some(RegistryId::Int128),
             Type::IntRange {
                 size: IntSize::B8,
                 sign: Sign::Unsigned,
-            } => "URange8",
+            } => Some(RegistryId::URange8),
             Type::IntRange {
                 size: IntSize::B16,
                 sign: Sign::Unsigned,
-            } => "URange16",
+            } => Some(RegistryId::URange16),
             Type::IntRange {
                 size: IntSize::B32,
                 sign: Sign::Unsigned,
-            } => "URange32",
+            } => Some(RegistryId::URange32),
             Type::IntRange {
                 size: IntSize::B64,
                 sign: Sign::Unsigned,
-            } => "URange64",
+            } => Some(RegistryId::URange64),
             Type::IntRange {
                 size: IntSize::B128,
                 sign: Sign::Unsigned,
-            } => "URange128",
+            } => Some(RegistryId::URange128),
             Type::IntRange {
                 size: IntSize::B8,
                 sign: Sign::Signed,
-            } => "Range8",
+            } => Some(RegistryId::Range8),
             Type::IntRange {
                 size: IntSize::B16,
                 sign: Sign::Signed,
-            } => "Range16",
+            } => Some(RegistryId::Range16),
             Type::IntRange {
                 size: IntSize::B32,
                 sign: Sign::Signed,
-            } => "Range32",
+            } => Some(RegistryId::Range32),
             Type::IntRange {
                 size: IntSize::B64,
                 sign: Sign::Signed,
-            } => "Range64",
+            } => Some(RegistryId::Range64),
             Type::IntRange {
                 size: IntSize::B128,
                 sign: Sign::Signed,
-            } => "Range128",
+            } => Some(RegistryId::Range128),
             Type::Float {
                 size: FloatSize::B32,
-            } => "Float32",
+            } => Some(RegistryId::Float32),
             Type::Float {
                 size: FloatSize::B64,
-            } => "Float64",
-            Type::String => "Str",
-            Type::Pointer(_) => "Ptr",
-            Type::Tuple(_) => "Tuple",
-            Type::Array(_) => "Array",
-            Type::Function { .. } => "Func",
-            Type::Node(_) => "Node",
-            Type::Custom { id, .. } => id,
-            _ => "",
+            } => Some(RegistryId::Float64),
+            Type::String => Some(RegistryId::Str),
+            Type::Pointer(_) => Some(RegistryId::Ptr),
+            Type::Tuple(_) => Some(RegistryId::Tuple),
+            Type::Array(_) => Some(RegistryId::Array),
+            Type::Function { .. } => Some(RegistryId::Func),
+            Type::Node(_) => Some(RegistryId::Node),
+            Type::Custom(id) => Some(RegistryId::Custom(id)),
+            _ => None,
         }
     }
 

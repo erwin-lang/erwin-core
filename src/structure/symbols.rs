@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::structure::{ast::Visibility, types::Type};
+use crate::structure::{ast::Visibility, registry_ids::RegistryId, types::Type};
 
 #[derive(Debug)]
 pub(crate) struct ModuleTable<'a> {
-    pub(crate) registry: HashMap<&'a str, Entry<'a>>,
+    pub(crate) registry: HashMap<RegistryId<'a>, Entry<'a>>,
     pub(crate) symbols: HashMap<&'a str, Symbol<'a>>,
     pub(crate) containers: HashMap<&'a str, Container<'a>>,
 }
@@ -12,7 +12,7 @@ pub(crate) struct ModuleTable<'a> {
 #[derive(Debug)]
 pub(crate) struct Container<'a> {
     pub(crate) visibility: &'a Visibility,
-    pub(crate) registry: Vec<&'a str>,
+    pub(crate) registry: Vec<RegistryId<'a>>,
 }
 
 #[derive(Debug)]

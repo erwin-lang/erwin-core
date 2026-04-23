@@ -1,5 +1,3 @@
-use crate::structure::types::Type;
-
 #[derive(Clone, Debug)]
 pub(crate) struct Statement<'a> {
     pub(crate) kind: StatementKind<'a>,
@@ -18,30 +16,30 @@ pub(crate) struct Expr<'a> {
 pub(crate) enum StatementKind<'a> {
     Import {
         alias: Option<&'a str>,
-        path: Vec<&'a str>,
+        path: Expr<'a>,
     },
     VarDeclare {
         visibility: Visibility,
         kind: VarKind,
         id: &'a str,
-        ty: Option<Type<'a>>,
+        ty: Option<Expr<'a>>,
         value: Expr<'a>,
     },
     VarAssign {
-        id: Expr<'a>,
+        var: Expr<'a>,
         value: Expr<'a>,
     },
     Node {
         visibility: Visibility,
         id: &'a str,
-        ty: Type<'a>,
+        ty: Expr<'a>,
         value: Expr<'a>,
     },
     Func {
         visibility: Visibility,
         id: &'a str,
         params: Vec<Param<'a>>,
-        ty: Type<'a>,
+        ty: Expr<'a>,
         body: Expr<'a>,
     },
     State {
@@ -55,7 +53,7 @@ pub(crate) enum StatementKind<'a> {
         types: Vec<Expr<'a>>,
     },
     Method {
-        id: &'a str,
+        target: Expr<'a>,
         methods: Expr<'a>,
     },
     Enum {
@@ -65,7 +63,7 @@ pub(crate) enum StatementKind<'a> {
     },
     Alias {
         alias_id: &'a str,
-        ty: Type<'a>,
+        ty: Expr<'a>,
     },
     Expr(Expr<'a>),
 }
@@ -85,14 +83,14 @@ pub(crate) enum Visibility {
 #[derive(Clone, Debug)]
 pub(crate) struct Param<'a> {
     pub(crate) id: &'a str,
-    pub(crate) ty: Type<'a>,
+    pub(crate) ty: Expr<'a>,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct Field<'a> {
     pub(crate) visibility: Visibility,
     pub(crate) id: &'a str,
-    pub(crate) ty: Type<'a>,
+    pub(crate) ty: Expr<'a>,
 }
 
 #[derive(Clone, Debug)]
@@ -104,7 +102,7 @@ pub(crate) struct InstanceField<'a> {
 #[derive(Clone, Debug)]
 pub(crate) struct Variant<'a> {
     pub(crate) id: &'a str,
-    pub(crate) data: Vec<Type<'a>>,
+    pub(crate) data: Vec<Expr<'a>>,
 }
 
 #[derive(Clone, Debug)]
@@ -129,7 +127,7 @@ pub(crate) enum ExprKind<'a> {
     Break,
     Continue,
     StateInstance {
-        id: &'a str,
+        id: Box<Expr<'a>>,
         fields: Vec<InstanceField<'a>>,
     },
 

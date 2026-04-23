@@ -11,6 +11,7 @@ use crate::{
     error::Error,
     structure::{
         ast::{ExprKind, Statement, Visibility},
+        registry_ids::RegistryId,
         symbols::{Container, Entry, ModuleTable, Symbol},
         types::{FloatSize, IntSize, Sign, Type},
     },
@@ -165,7 +166,11 @@ impl<'a> Checker<'a> {
             );
         };
 
-        if module_table.registry.contains_key(id) || module_table.containers.contains_key(id) {
+        if module_table
+            .registry
+            .contains_key(&RegistryId::from_str(id))
+            || module_table.containers.contains_key(id)
+        {
             return self.loc_error(
                 line,
                 col,
@@ -207,7 +212,9 @@ impl<'a> Checker<'a> {
             );
         };
 
-        if module_table.registry.contains_key(id)
+        let registry_id = RegistryId::from_str(id);
+
+        if module_table.registry.contains_key(&registry_id)
             || module_table.containers.contains_key(id)
             || module_table.symbols.contains_key(id)
         {
@@ -222,7 +229,7 @@ impl<'a> Checker<'a> {
             );
         }
 
-        module_table.registry.insert(id, entry);
+        module_table.registry.insert(registry_id, entry);
         Ok(())
     }
 
@@ -245,7 +252,9 @@ impl<'a> Checker<'a> {
         };
 
         if module_table.containers.contains_key(id)
-            || module_table.registry.contains_key(id)
+            || module_table
+                .registry
+                .contains_key(&RegistryId::from_str(id))
             || module_table.symbols.contains_key(id)
         {
             return self.loc_error(
@@ -270,18 +279,14 @@ impl<'a> Checker<'a> {
         line: usize,
         col: usize,
     ) -> Result<&Symbol<'a>, Error> {
-        let is_local = path == self.current_module;
-
-        if is_local {
+        if path == self.current_module {
             for scope in self.current_scopes.iter().rev() {
                 if let Some(symbol) = scope.get(id) {
                     return Ok(symbol);
                 }
             }
         } else {
-            let table = if let Some(m) = self.tables.get(path) {
-                m
-            } else {
+            let Some(table) = self.tables.get(path) else {
                 return self.loc_error(
                     line,
                     col,
@@ -315,14 +320,28 @@ impl<'a> Checker<'a> {
 
     pub(super) fn resolve_entry(
         &self,
-        id: &str,
-        path: &Path,
+        id: &'a RegistryId<'a>,
         line: usize,
         col: usize,
     ) -> Result<&Entry<'a>, Error> {
-        let table = if let Some(m) = self.tables.get(path) {
-            m
+        let path = if let RegistryId::Custom {
+            module: Some(module),
+            ..
+        } = id
+        {
+            if let Type::Module(p) = self
+                .resolve_symbol(module, self.current_module, line, col)?
+                .ty
+            {
+                p
+            } else {
+                return self.loc_error(line, col, "Expected module symbol".to_string());
+            }
         } else {
+            self.current_module
+        };
+
+        let Some(table) = self.tables.get(path) else {
             return self.loc_error(
                 line,
                 col,
@@ -330,18 +349,20 @@ impl<'a> Checker<'a> {
             );
         };
 
-        let entry = if let Some(e) = table.registry.get(id) {
-            e
-        } else {
+        let Some(entry) = table.registry.get(id) else {
             return self.loc_error(
                 line,
                 col,
-                format!("Entry '{}' not found in module {}", id, path.display()),
+                format!(
+                    "Entry '{}' not found in module {}",
+                    id.to_str(),
+                    path.display()
+                ),
             );
         };
 
         if self.current_module != path && matches!(entry.visibility, Visibility::Priv) {
-            return self.loc_error(line, col, format!("Entry '{}' is private", id));
+            return self.loc_error(line, col, format!("Entry '{}' is private", id.to_str()));
         }
 
         Ok(entry)
@@ -349,44 +370,38 @@ impl<'a> Checker<'a> {
 
     pub(super) fn resolve_entry_mut(
         &mut self,
-        id: &str,
+        id: &'a RegistryId<'a>,
         line: usize,
         col: usize,
     ) -> Result<&mut Entry<'a>, Error> {
-        let table = if let Some(m) = self.tables.get(self.current_module) {
-            m
-        } else {
-            return self.loc_error(
-                line,
-                col,
-                format!(
-                    "Module {} not found in registry",
-                    self.current_module.display()
-                ),
-            );
+        let table_error = self.loc_error(
+            line,
+            col,
+            format!(
+                "Module {} not found in registry",
+                self.current_module.display()
+            ),
+        );
+
+        let entry_error = self.loc_error(
+            line,
+            col,
+            format!(
+                "Entry '{}' not found in module {}",
+                id.to_str(),
+                self.current_module.display()
+            ),
+        );
+
+        let Some(table) = self.tables.get_mut(self.current_module) else {
+            return table_error;
         };
 
-        if !table.registry.contains_key(id) {
-            return self.loc_error(
-                line,
-                col,
-                format!(
-                    "Container '{}' not found in module {}",
-                    id,
-                    self.current_module.display()
-                ),
-            );
-        }
+        let Some(entry) = table.registry.get_mut(id) else {
+            return entry_error;
+        };
 
-        let container_mut = self
-            .tables
-            .get_mut(self.current_module)
-            .unwrap()
-            .registry
-            .get_mut(id)
-            .unwrap();
-
-        Ok(container_mut)
+        Ok(entry)
     }
 
     pub(super) fn resolve_container(
@@ -429,40 +444,34 @@ impl<'a> Checker<'a> {
         line: usize,
         col: usize,
     ) -> Result<&mut Container<'a>, Error> {
-        let table = if let Some(m) = self.tables.get(self.current_module) {
-            m
-        } else {
-            return self.loc_error(
-                line,
-                col,
-                format!(
-                    "Module {} not found in registry",
-                    self.current_module.display()
-                ),
-            );
+        let table_error = self.loc_error(
+            line,
+            col,
+            format!(
+                "Module {} not found in registry",
+                self.current_module.display()
+            ),
+        );
+
+        let container_error = self.loc_error(
+            line,
+            col,
+            format!(
+                "Container '{}' not found in module {}",
+                id,
+                self.current_module.display()
+            ),
+        );
+
+        let Some(table) = self.tables.get_mut(self.current_module) else {
+            return table_error;
         };
 
-        if !table.containers.contains_key(id) {
-            return self.loc_error(
-                line,
-                col,
-                format!(
-                    "Container '{}' not found in module {}",
-                    id,
-                    self.current_module.display()
-                ),
-            );
-        }
+        let Some(container) = table.containers.get_mut(id) else {
+            return container_error;
+        };
 
-        let container_mut = self
-            .tables
-            .get_mut(self.current_module)
-            .unwrap()
-            .containers
-            .get_mut(id)
-            .unwrap();
-
-        Ok(container_mut)
+        Ok(container)
     }
 
     pub(super) fn loc_error<T>(&self, line: usize, col: usize, msg: String) -> Result<T, Error> {
@@ -589,181 +598,181 @@ impl<'a> Checker<'a> {
         ty.clone()
     }
 
-    fn fill_primitives(&self) -> HashMap<&'a str, Entry<'a>> {
+    fn fill_primitives(&self) -> HashMap<RegistryId<'a>, Entry<'a>> {
         let primitives = [
-            ("Bool", Type::Bool),
+            (RegistryId::Bool, Type::Bool),
             (
-                "UInt8",
+                RegistryId::UInt8,
                 Type::Integer {
                     size: IntSize::B8,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "UInt16",
+                RegistryId::UInt16,
                 Type::Integer {
                     size: IntSize::B16,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "UInt32",
+                RegistryId::UInt32,
                 Type::Integer {
                     size: IntSize::B32,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "UInt64",
+                RegistryId::UInt64,
                 Type::Integer {
                     size: IntSize::B64,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "UInt128",
+                RegistryId::UInt128,
                 Type::Integer {
                     size: IntSize::B128,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "Int8",
+                RegistryId::Int8,
                 Type::Integer {
                     size: IntSize::B8,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Int16",
+                RegistryId::Int16,
                 Type::Integer {
                     size: IntSize::B16,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Int32",
+                RegistryId::Int32,
                 Type::Integer {
                     size: IntSize::B32,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Int64",
+                RegistryId::Int64,
                 Type::Integer {
                     size: IntSize::B64,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Int128",
+                RegistryId::Int128,
                 Type::Integer {
                     size: IntSize::B128,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "URange8",
+                RegistryId::URange8,
                 Type::IntRange {
                     size: IntSize::B8,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "URange16",
+                RegistryId::URange16,
                 Type::IntRange {
                     size: IntSize::B16,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "URange32",
+                RegistryId::URange32,
                 Type::IntRange {
                     size: IntSize::B32,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "URange64",
+                RegistryId::URange64,
                 Type::IntRange {
                     size: IntSize::B64,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "URange128",
+                RegistryId::URange128,
                 Type::IntRange {
                     size: IntSize::B128,
                     sign: Sign::Unsigned,
                 },
             ),
             (
-                "Range8",
+                RegistryId::Range8,
                 Type::IntRange {
                     size: IntSize::B8,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Range16",
+                RegistryId::Range16,
                 Type::IntRange {
                     size: IntSize::B16,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Range32",
+                RegistryId::Range32,
                 Type::IntRange {
                     size: IntSize::B32,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Range64",
+                RegistryId::Range64,
                 Type::IntRange {
                     size: IntSize::B64,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Range128",
+                RegistryId::Range128,
                 Type::IntRange {
                     size: IntSize::B128,
                     sign: Sign::Signed,
                 },
             ),
             (
-                "Float32",
+                RegistryId::Float32,
                 Type::Float {
                     size: FloatSize::B32,
                 },
             ),
             (
-                "Float64",
+                RegistryId::Float64,
                 Type::Float {
                     size: FloatSize::B64,
                 },
             ),
-            ("Str", Type::String),
-            ("Ptr", Type::Pointer(Box::new(Type::Unknown))),
-            ("Ref", Type::Ref(Box::new(Type::Unknown))),
-            ("Tuple", Type::Tuple(Vec::new())),
-            ("Array", Type::Array(Box::new(Type::Unknown))),
+            (RegistryId::Str, Type::String),
+            (RegistryId::Ptr, Type::Pointer(Box::new(Type::Unknown))),
+            (RegistryId::Ref, Type::Ref(Box::new(Type::Unknown))),
+            (RegistryId::Tuple, Type::Tuple(Vec::new())),
+            (RegistryId::Array, Type::Array(Box::new(Type::Unknown))),
             (
-                "Func",
+                RegistryId::Func,
                 Type::Function {
                     params: Vec::new(),
                     return_ty: Box::new(Type::Unknown),
                 },
             ),
-            ("Node", Type::Node(Box::new(Type::Unknown))),
+            (RegistryId::Node, Type::Node(Box::new(Type::Unknown))),
         ];
 
         let mut registry = HashMap::new();
 
-        for (name, formal_type) in primitives {
+        for (id, formal_type) in primitives {
             registry.insert(
-                name,
+                id,
                 Entry {
                     visibility: &Visibility::Pub,
                     symbols: HashMap::new(),

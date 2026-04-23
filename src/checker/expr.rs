@@ -3,11 +3,13 @@ use std::mem::take;
 use crate::{
     checker::Checker,
     error::Error,
+    parser::registry_ids,
     structure::{
         ast::{
             BinaryOp, Expr, ExprKind, InstanceField, Param, Statement, StatementKind, UnaryOp,
             Visibility,
         },
+        registry_ids::RegistryId,
         symbols::Symbol,
         types::{FloatSize, IntSize, Sign, Type},
     },
@@ -176,10 +178,16 @@ impl<'a> Checker<'a> {
             );
         }
 
-        let registry_id = target_ty.registry_id();
+        let Some(registry_id) = target_ty.registry_id() else {
+            return self.loc_error(
+                target.line,
+                target.col,
+                "Type does not have a registry entry and thus cannot be modified".to_string(),
+            );
+        };
 
         if let ExprKind::Identifier(id) = target.kind
-            && id == registry_id
+            && RegistryId::from_str(id) == registry_id
         {
             return self.loc_error(
                 target.line,

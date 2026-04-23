@@ -544,6 +544,26 @@ impl<'a> Parser<'a> {
                         col: start_col,
                     };
                 }
+                TokenKind::LBrace => {
+                    self.advance()?;
+
+                    let fields = if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
+                        Vec::new()
+                    } else {
+                        self.parse_comma_separated(|p| p.parse_instance_field())?
+                    };
+
+                    self.consume(TokenKind::RBrace, "Expected '}'")?;
+
+                    base = Expr {
+                        kind: ExprKind::StateInstance {
+                            id: Box::new(base),
+                            fields,
+                        },
+                        line: start_line,
+                        col: start_col,
+                    };
+                }
                 _ => break,
             }
         }
@@ -599,24 +619,6 @@ impl<'a> Parser<'a> {
             TokenKind::Identifier(id) => {
                 self.advance()?;
 
-                if matches!(self.peek(0)?.kind, TokenKind::LBrace) {
-                    self.advance()?;
-
-                    let fields = if matches!(self.peek(0)?.kind, TokenKind::RBrace) {
-                        Vec::new()
-                    } else {
-                        self.parse_comma_separated(|p| p.parse_instance_field())?
-                    };
-
-                    self.consume(TokenKind::RBrace, "Expected '}'")?;
-
-                    return Ok(Expr {
-                        kind: ExprKind::StateInstance { id, fields },
-                        line: start_line,
-                        col: start_col,
-                    });
-                }
-
                 Ok(Expr {
                     kind: ExprKind::Identifier(id),
                     line: start_line,
@@ -661,26 +663,18 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Do => {
                 self.advance()?;
+                self.consume(TokenKind::LBrace, "Expected '{'")?;
 
-                let brace_line = self.peek(0)?.line;
-                let brace_col = self.peek(0)?.col;
                 let mut stmts = Vec::new();
-                self.advance()?;
 
                 while !matches!(self.peek(0)?.kind, TokenKind::RBrace | TokenKind::Eof) {
                     stmts.push(self.parse_statement()?);
                 }
 
-                if matches!(self.peek(0)?.kind, TokenKind::Eof) {
-                    return self.loc_error(brace_line, brace_col, "Unterminated block");
-                }
-
-                self.advance()?;
-
-                let kind = ExprKind::Block(stmts);
+                self.consume(TokenKind::RBrace, "Expected '}'")?;
 
                 Ok(Expr {
-                    kind,
+                    kind: ExprKind::Block(stmts),
                     line: start_line,
                     col: start_col,
                 })

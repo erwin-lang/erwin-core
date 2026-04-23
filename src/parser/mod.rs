@@ -1,13 +1,11 @@
 pub(super) mod expr;
 pub(super) mod statement;
-pub(super) mod types;
 
 use crate::{
     error::Error,
     structure::{
         ast::{Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility},
         token::{Token, TokenKind},
-        types::Type,
     },
 };
 
@@ -31,36 +29,16 @@ impl<'a> Parser<'a> {
         Ok(program)
     }
 
-    pub(super) fn parse_path(&mut self) -> Result<Vec<&'a str>, Error> {
-        let mut path = Vec::new();
-
-        loop {
-            if let TokenKind::Identifier(element) = self.peek(0)?.kind {
-                path.push(element);
-                self.advance()?;
-            } else {
-                return self.error("Expected identifier in path");
-            }
-
-            if matches!(self.peek(0)?.kind, TokenKind::DoubleColon)
-                && matches!(self.peek(1)?.kind, TokenKind::Identifier(_))
-            {
-                self.advance()?;
-            } else {
-                break;
-            }
-        }
-
-        Ok(path)
-    }
-
     pub(super) fn parse_comma_separated<T, F>(&mut self, mut parse_item: F) -> Result<Vec<T>, Error>
     where
         F: FnMut(&mut Self) -> Result<T, Error>,
     {
         let mut items = Vec::new();
 
-        if matches!(self.peek(0)?.kind, TokenKind::RParen | TokenKind::RSquare) {
+        if matches!(
+            self.peek(0)?.kind,
+            TokenKind::RParen | TokenKind::RSquare | TokenKind::RBrace
+        ) {
             return Ok(items);
         }
 
@@ -70,7 +48,10 @@ impl<'a> Parser<'a> {
             if matches!(self.peek(0)?.kind, TokenKind::Comma) {
                 self.advance()?;
 
-                if matches!(self.peek(0)?.kind, TokenKind::RParen | TokenKind::RSquare) {
+                if matches!(
+                    self.peek(0)?.kind,
+                    TokenKind::RParen | TokenKind::RSquare | TokenKind::RBrace
+                ) {
                     break;
                 }
             } else {
@@ -82,23 +63,27 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_param(&mut self) -> Result<Param<'a>, Error> {
-        let id = match self.peek(0)?.kind {
-            TokenKind::Identifier(id) => {
-                self.advance()?;
-                id
-            }
-            _ => return self.error("Expected parameter identifier"),
+        let TokenKind::Identifier(id) = self.peek(0)?.kind else {
+            return self.error("Expected parameter identifier");
         };
+
+        let start_line = self.peek(0)?.line;
+        let start_col = self.peek(0)?.col;
+        self.advance()?;
 
         if id == "self" {
             return Ok(Param {
                 id,
-                ty: Type::Unknown,
+                ty: Expr {
+                    kind: ExprKind::Identifier("Self"),
+                    line: start_line,
+                    col: start_col,
+                },
             });
         }
 
         self.consume(TokenKind::Colon, "Expected ':'")?;
-        let ty = self.parse_type()?;
+        let ty = self.parse_expr()?;
 
         Ok(Param { id, ty })
     }
@@ -120,7 +105,7 @@ impl<'a> Parser<'a> {
         };
 
         self.consume(TokenKind::Colon, "Expected ':'")?;
-        let ty = self.parse_type()?;
+        let ty = self.parse_expr()?;
 
         Ok(Field { visibility, id, ty })
     }
@@ -152,24 +137,11 @@ impl<'a> Parser<'a> {
         let mut data = Vec::new();
         if matches!(self.peek(0)?.kind, TokenKind::LParen) {
             self.advance()?;
-            data = self.parse_comma_separated(|p| p.parse_type())?;
+            data = self.parse_comma_separated(|p| p.parse_expr())?;
             self.consume(TokenKind::RParen, "Expected ')'")?;
         }
 
         Ok(Variant { id, data })
-    }
-
-    pub(super) fn parse_container_type(&mut self) -> Result<Expr<'a>, Error> {
-        let expr = self.parse_expr()?;
-
-        if !matches!(
-            expr.kind,
-            ExprKind::Identifier(_) | ExprKind::StaticAccess { .. }
-        ) {
-            return self.loc_error(expr.line, expr.col, "Expected type");
-        }
-
-        Ok(expr)
     }
 
     pub(super) fn is_brace_terminated(&self, expr: &Expr<'a>) -> bool {

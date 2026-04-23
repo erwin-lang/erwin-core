@@ -7,6 +7,7 @@ use crate::{
         ast::{
             Expr, ExprKind, Field, Param, Statement, StatementKind, VarKind, Variant, Visibility,
         },
+        registry_ids::RegistryId,
         symbols::{Container, Entry, Symbol},
         types::Type,
     },
@@ -292,8 +293,8 @@ impl<'a> Checker<'a> {
 
         let mut targets = Vec::new();
 
-        if self.resolve_entry_mut(id, stmt.line, stmt.col).is_ok() {
-            targets.push(id);
+        if self.resolve_entry_mut(, stmt.line, stmt.col).is_ok() {
+            targets.push(RegistryId::from_str(id));
         } else if let Ok(container) = self.resolve_container_mut(id, stmt.line, stmt.col) {
             for entry_id in container.registry.clone() {
                 targets.push(entry_id);
@@ -307,7 +308,7 @@ impl<'a> Checker<'a> {
         }
 
         for entry_id in targets {
-            let entry = self.resolve_entry_mut(entry_id, stmt.line, stmt.col)?;
+            let entry = self.resolve_entry_mut(entry_id.to_str(), stmt.line, stmt.col)?;
 
             for stmt in stmts {
                 if let StatementKind::Func {
@@ -558,42 +559,27 @@ impl<'a> Checker<'a> {
         &mut self,
         stmt: &Statement<'a>,
         id: &'a str,
-        body: &Vec<Expr<'a>>,
+        body: &Vec<RegistryId<'a>>,
     ) -> Result<(), Error> {
         if self.current_scopes.len() != 1 {
             return self.loc_error(
                 stmt.line,
                 stmt.col,
-                "Type containers be defined in the global scope of a module".to_string(),
+                "Type containers must be defined in the global scope of a module".to_string(),
             );
         }
 
-        let mut entries = Vec::new();
-
-        for expr in body {
-            match &expr.kind {
-                ExprKind::Identifier(ty) => {
-                    entries.push(*ty);
-                }
-                ExprKind::StaticAccess { member, .. } => {
-                    entries.push(*member);
-                }
-                _ => {
-                    return self.loc_error(
-                        expr.line,
-                        expr.col,
-                        "Invalid container element".to_string(),
-                    );
-                }
-            }
-        }
-
-        for entry in &entries {
-            self.resolve_entry(entry, self.current_module, stmt.line, stmt.col)?;
+        for registry_id in body {
+            self.resolve_entry(
+                registry_id.to_str(),
+                self.current_module,
+                stmt.line,
+                stmt.col,
+            )?;
         }
 
         let container = self.resolve_container_mut(id, stmt.line, stmt.col)?;
-        container.registry.extend(entries);
+        container.registry.extend(body.clone());
 
         Ok(())
     }
@@ -633,7 +619,7 @@ impl<'a> Checker<'a> {
                     {
                         for entry_id in container.registry.clone() {
                             let entry = self.resolve_entry(
-                                entry_id,
+                                entry_id.to_str(),
                                 self.current_module,
                                 stmt.line,
                                 stmt.col,

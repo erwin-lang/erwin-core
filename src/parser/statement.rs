@@ -15,9 +15,9 @@ impl<'a> Parser<'a> {
             TokenKind::Import => self.parse_import(),
             TokenKind::Var => self.parse_var(VarKind::Var, Visibility::Priv),
             TokenKind::Mut => self.parse_assign(),
-            TokenKind::Node => self.parse_node(Visibility::Priv),
+            TokenKind::NodeStmt => self.parse_node(Visibility::Priv),
             TokenKind::Const => self.parse_var(VarKind::Const, Visibility::Priv),
-            TokenKind::Func => self.parse_func(Visibility::Priv),
+            TokenKind::FuncStmt => self.parse_func(Visibility::Priv),
             TokenKind::State => self.parse_state(Visibility::Priv),
             TokenKind::Container => self.parse_container(Visibility::Priv),
             TokenKind::Enum => self.parse_enum(Visibility::Priv),
@@ -43,7 +43,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let path = self.parse_path()?;
+        let path = self.parse_expr()?;
         self.consume(TokenKind::Semicolon, "Expected ';'")?;
 
         Ok(Statement {
@@ -68,7 +68,7 @@ impl<'a> Parser<'a> {
 
         let ty = if matches!(self.peek(0)?.kind, TokenKind::Colon) {
             self.advance()?;
-            Some(self.parse_type()?)
+            Some(self.parse_expr()?)
         } else {
             None
         };
@@ -99,7 +99,7 @@ impl<'a> Parser<'a> {
 
         self.advance()?;
 
-        let id = self.parse_expr()?;
+        let var = self.parse_expr()?;
 
         self.consume(TokenKind::Assign, "Expected '='")?;
         let value = self.parse_expr()?;
@@ -109,7 +109,7 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Statement {
-            kind: StatementKind::VarAssign { id, value },
+            kind: StatementKind::VarAssign { var, value },
             line: start_line,
             col: start_col,
         })
@@ -129,7 +129,7 @@ impl<'a> Parser<'a> {
         };
 
         self.consume(TokenKind::Colon, "Expected ':'")?;
-        let ty = self.parse_type()?;
+        let ty = self.parse_expr()?;
         self.consume(TokenKind::Assign, "Expected '='")?;
         let value = self.parse_expr()?;
 
@@ -167,11 +167,7 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::RParen, "Expected ')'")?;
         self.consume(TokenKind::RArrow, "Expected '->'")?;
 
-        let ty = Type::Function {
-            params: params.iter().map(|p| p.ty.clone()).collect(),
-            return_ty: Box::new(self.parse_type()?),
-        };
-
+        let ty = self.parse_expr()?;
         let body = self.parse_expr()?;
 
         if !matches!(body.kind, ExprKind::Block(_)) {
@@ -233,7 +229,7 @@ impl<'a> Parser<'a> {
         };
 
         self.consume(TokenKind::LBrace, "Expected '{'")?;
-        let types = self.parse_comma_separated(|p| p.parse_container_type())?;
+        let types = self.parse_comma_separated(|p| p.parse_expr())?;
         self.consume(TokenKind::RBrace, "Expected '}'")?;
 
         Ok(Statement {
@@ -281,12 +277,7 @@ impl<'a> Parser<'a> {
 
         self.advance()?;
 
-        let id = if let TokenKind::Identifier(name) = self.peek(0)?.kind {
-            self.advance()?;
-            name
-        } else {
-            return self.error("Expected object or enumeration name");
-        };
+        let target = self.parse_expr()?;
 
         let methods_line = self.peek(0)?.line;
         let methods_col = self.peek(0)?.col;
@@ -311,7 +302,7 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Statement {
-            kind: StatementKind::Method { id, methods },
+            kind: StatementKind::Method { target, methods },
             line: start_line,
             col: start_col,
         })
@@ -330,7 +321,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
         self.consume(TokenKind::Assign, "Expected '='")?;
 
-        let ty = self.parse_type()?;
+        let ty = self.parse_expr()?;
 
         self.consume(TokenKind::Semicolon, "Expected ';'")?;
 
@@ -345,27 +336,6 @@ impl<'a> Parser<'a> {
         let start_line = self.peek(0)?.line;
         let start_col = self.peek(0)?.col;
         let expr = self.parse_expr()?;
-
-        if !matches!(
-            expr.kind,
-            ExprKind::Block(_)
-                | ExprKind::For { .. }
-                | ExprKind::While { .. }
-                | ExprKind::If { .. }
-                | ExprKind::Call { .. }
-                | ExprKind::Return(_)
-                | ExprKind::Break
-                | ExprKind::Continue
-                | ExprKind::Yield(_)
-                | ExprKind::StaticAccess { .. }
-                | ExprKind::MemberAccess { .. }
-        ) {
-            return self.loc_error(
-                start_line,
-                start_col,
-                "This expression cannot be a statement",
-            );
-        }
 
         if !self.is_brace_terminated(&expr) {
             self.consume(TokenKind::Semicolon, "Expected ';'")?;
@@ -382,9 +352,9 @@ impl<'a> Parser<'a> {
         self.advance()?;
         match self.peek(0)?.kind {
             TokenKind::Var => self.parse_var(VarKind::Var, Visibility::Pub),
-            TokenKind::Node => self.parse_node(Visibility::Pub),
+            TokenKind::NodeStmt => self.parse_node(Visibility::Pub),
             TokenKind::Const => self.parse_var(VarKind::Const, Visibility::Pub),
-            TokenKind::Func => self.parse_func(Visibility::Pub),
+            TokenKind::FuncStmt => self.parse_func(Visibility::Pub),
             TokenKind::State => self.parse_state(Visibility::Pub),
             TokenKind::Container => self.parse_container(Visibility::Pub),
             TokenKind::Pub => self.error("Repeated visibility modifier"),

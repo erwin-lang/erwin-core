@@ -6,12 +6,8 @@ pub(crate) struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    pub(crate) fn new(kind: TokenKind<'a>, line: usize, column: usize) -> Self {
-        Self {
-            kind,
-            line,
-            col: column,
-        }
+    pub(crate) fn new(kind: TokenKind<'a>, line: usize, col: usize) -> Self {
+        Self { kind, line, col }
     }
 }
 
@@ -23,12 +19,12 @@ pub(crate) enum TokenKind<'a> {
     Var,       // Variable definition
     Mut,       // Variable assignment
     Const,     // Constant variable definition
-    Node,      // Node definition
+    NodeStmt,  // Node definition
     State,     // Object state definition block
     Container, // Type generic container
     Enum,      // Sum type definition block
     Method,    // Method implementation block
-    Func,      // Function definition
+    FuncStmt,  // Function definition
     Return,    // Exit function with return value
     Yield,     // Yield a value from the local scope
     Do,        // Used before control flow body
@@ -45,31 +41,37 @@ pub(crate) enum TokenKind<'a> {
     Import,    // Import another module
     Alias,     // Type alias
 
-    // Primitive types
+    // Primitive types / registry ids
     Bool,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    Int128,
     UInt8,
     UInt16,
     UInt32,
     UInt64,
     UInt128,
-    IntRange8,
-    IntRange16,
-    IntRange32,
-    IntRange64,
-    IntRange128,
-    UIntRange8,
-    UIntRange16,
-    UIntRange32,
-    UIntRange64,
-    UIntRange128,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    URange8,
+    URange16,
+    URange32,
+    URange64,
+    URange128,
+    Range8,
+    Range16,
+    Range32,
+    Range64,
+    Range128,
     Float32,
     Float64,
-    String,
+    Str,
+    Ptr,
+    Ref,
+    Tuple,
+    Array,
+    Func,
+    Node,
 
     // Values
     Number(&'a str),
