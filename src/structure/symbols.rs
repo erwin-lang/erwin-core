@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::structure::{ast::Visibility, registry_ids::RegistryId, types::Type};
+use crate::structure::{ast::Visibility, registry_id::RegistryId, types::Type};
 
 #[derive(Debug)]
 pub(crate) struct ModuleTable<'a> {

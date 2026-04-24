@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::structure::registry_ids::RegistryId;
+use crate::structure::registry_id::RegistryId;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Type<'a> {

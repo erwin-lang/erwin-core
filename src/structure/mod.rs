@@ -1,5 +1,5 @@
 pub(crate) mod ast;
-pub(crate) mod registry_ids;
+pub(crate) mod registry_id;
 pub(crate) mod symbols;
 pub(crate) mod token;
 pub(crate) mod types;
