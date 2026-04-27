@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{
     error::{Error, loc_error},
     parser::Parser,
@@ -46,7 +48,11 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::Semicolon, "Expected ';'")?;
 
         Ok(Statement {
-            kind: StatementKind::Import { alias, path },
+            kind: StatementKind::Import {
+                alias,
+                path,
+                resolved_path: PathBuf::new(),
+            },
             line: start_line,
             col: start_col,
         })

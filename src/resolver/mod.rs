@@ -51,28 +51,34 @@ impl<'a> Resolver<'a> {
         let tokens = Lexer::new(leaked_code).tokenize()?;
         let current_stmts = Parser::new(tokens).parse()?;
 
-        for stmt in current_stmts {
-            if let StatementKind::Import { path, .. } = &stmt.kind {
-                let flattened_path = self.flatten_path(path)?;
-                let mut next_path = match flattened_path.first() {
+        for mut stmt in current_stmts {
+            if let StatementKind::Import {
+                path,
+                resolved_path,
+                ..
+            } = &mut stmt.kind
+            {
+                let parts = self.flatten_path(path)?;
+                let mut next_path = match parts.first() {
                     Some(&"std") => self
                         .std_path
                         .parent()
                         .unwrap_or(Path::new("."))
                         .to_path_buf(),
-                    Some(_) => self
+                    _ => self
                         .main_module
                         .parent()
                         .unwrap_or(Path::new("."))
                         .to_path_buf(),
-                    None => unreachable!(),
                 };
 
-                for part in flattened_path {
+                for part in &parts {
                     next_path.push(part);
+                    resolved_path.push(part);
                 }
 
                 next_path.set_extension("erw");
+
                 self.resolve_imports(&next_path)?;
             }
 
@@ -82,7 +88,7 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    pub(crate) fn flatten_path(&self, expr: &'a Expr<'a>) -> Result<Vec<&'a str>, Error> {
+    pub(crate) fn flatten_path(&self, expr: &Expr<'a>) -> Result<Vec<&'a str>, Error> {
         match &expr.kind {
             ExprKind::Identifier(id) => Ok(vec![id]),
             ExprKind::StaticAccess { target, member } => {

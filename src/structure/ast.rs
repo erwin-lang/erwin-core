@@ -1,13 +1,8 @@
+use std::path::PathBuf;
+
 #[derive(Clone, Debug)]
 pub(crate) struct Statement<'a> {
     pub(crate) kind: StatementKind<'a>,
-    pub(crate) line: usize,
-    pub(crate) col: usize,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct Expr<'a> {
-    pub(crate) kind: ExprKind<'a>,
     pub(crate) line: usize,
     pub(crate) col: usize,
 }
@@ -17,6 +12,7 @@ pub(crate) enum StatementKind<'a> {
     Import {
         alias: Option<&'a str>,
         path: Expr<'a>,
+        resolved_path: PathBuf,
     },
     VarDeclare {
         visibility: Visibility,
@@ -94,15 +90,16 @@ pub(crate) struct Field<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct InstanceField<'a> {
-    pub(crate) id: &'a str,
-    pub(crate) value: Expr<'a>,
-}
-
-#[derive(Clone, Debug)]
 pub(crate) struct Variant<'a> {
     pub(crate) id: &'a str,
     pub(crate) data: Vec<Expr<'a>>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Expr<'a> {
+    pub(crate) kind: ExprKind<'a>,
+    pub(crate) line: usize,
+    pub(crate) col: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -168,6 +165,12 @@ pub(crate) enum ExprKind<'a> {
         params: Vec<Param<'a>>,
         body: Box<Expr<'a>>,
     },
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct InstanceField<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) value: Expr<'a>,
 }
 
 #[derive(Clone, Debug)]
