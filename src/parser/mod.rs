@@ -4,8 +4,10 @@ pub(super) mod statement;
 use crate::{
     error::{Error, loc_error},
     structure::{
-        ast::{Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility},
-        token::{Token, TokenKind},
+        lexer::token::{Token, TokenKind},
+        parser::ast::{
+            Expr, ExprKind, Field, InstanceField, Param, Statement, Variant, Visibility,
+        },
     },
 };
 

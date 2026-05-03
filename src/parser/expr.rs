@@ -2,8 +2,8 @@ use crate::{
     error::Error,
     parser::Parser,
     structure::{
-        ast::{BinaryOp, Expr, ExprKind, UnaryOp},
-        token::TokenKind,
+        lexer::token::TokenKind,
+        parser::ast::{BinaryOp, Expr, ExprKind, UnaryOp},
     },
 };
 

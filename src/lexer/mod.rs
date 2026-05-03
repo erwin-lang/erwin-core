@@ -2,7 +2,7 @@ pub(super) mod chars;
 
 use crate::{
     error::Error,
-    structure::token::{Token, TokenKind},
+    structure::lexer::token::{Token, TokenKind},
 };
 
 pub(crate) struct Lexer<'a> {

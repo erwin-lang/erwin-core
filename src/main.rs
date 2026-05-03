@@ -1,7 +1,8 @@
-use std::{env::args, fs::write, path::Path};
+use std::{collections::HashMap, env::args, path::Path};
 
-use crate::{checker::Checker, error::Error, resolver::Resolver};
+use crate::{arena::Arena, checker::Checker, error::Error, resolver::Resolver};
 
+mod arena;
 mod checker;
 mod error;
 mod lexer;
@@ -18,16 +19,13 @@ fn main() -> Result<(), Error> {
     let std_path = Path::new("/usr/lib/erwin/std/").canonicalize()?;
     let prelude_module = std_path.join("prelude.erw").canonicalize()?;
     let main_module = Path::new(&args[1]).canonicalize()?;
+    let arena = Box::leak(Box::new(Arena::new()));
 
     let registry = Resolver::new(&std_path, &main_module).resolve()?;
-    let symbol_table = Checker::new(&std_path, &prelude_module, &main_module, &registry).check()?;
 
-    // TEST: let's save the AST tree and the symbol table to check them!
-    write("/home/canfro/ast.txt", format!("{:#?}", registry))?;
-    write(
-        "/home/canfro/symbol_table.txt",
-        format!("{:#?}", symbol_table),
-    )?;
+    let mut checker = Checker::new(&arena, &std_path, &prelude_module, &main_module, &registry);
+    let (instructions, literals) = checker.check()?;
+    checker.debug()?;
 
     Ok(())
 }

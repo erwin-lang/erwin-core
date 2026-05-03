@@ -64,13 +64,13 @@ pub(crate) enum StatementKind<'a> {
     Expr(Expr<'a>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum VarKind {
     Const,
     Var,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum Visibility {
     Pub,
     Priv,
@@ -173,7 +173,7 @@ pub(crate) struct InstanceField<'a> {
     pub(crate) value: Expr<'a>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum UnaryOp {
     Not,
     Minus,
@@ -181,7 +181,7 @@ pub(crate) enum UnaryOp {
     Deref,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum BinaryOp {
     Pow,
 

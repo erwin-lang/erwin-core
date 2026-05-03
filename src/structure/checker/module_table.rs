@@ -1,6 +1,154 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
-use crate::structure::type_expr::TypeSymbolKind;
+use crate::structure::parser::ast::Visibility;
+
+#[derive(Debug, Clone)]
+pub(crate) struct ModuleTable<'a> {
+    pub(crate) scopes: Vec<Scope<'a>>,
+    pub(crate) type_symbols: HashMap<&'a str, &'a TypeSymbol<'a>>,
+    pub(crate) containers: HashMap<&'a str, &'a Container<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Scope<'a> {
+    pub(crate) parent: Option<usize>,
+    pub(crate) scope_symbols: HashMap<&'a str, &'a ScopeSymbol<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ScopeSymbol<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) module: &'a Path,
+    pub(crate) scope_index: Option<usize>,
+    pub(crate) visibility: &'a Visibility,
+    pub(crate) ty: &'a Type<'a>,
+    pub(crate) is_static_member: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TypeSymbol<'a> {
+    pub(crate) module: &'a Path,
+    pub(crate) visibility: &'a Visibility,
+    pub(crate) kind: TypeSymbolKind<'a>,
+    pub(crate) members: HashMap<&'a str, &'a ScopeSymbol<'a>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum TypeSymbolKind<'a> {
+    Bool,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    UInt128,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    URange8,
+    URange16,
+    URange32,
+    URange64,
+    URange128,
+    Range8,
+    Range16,
+    Range32,
+    Range64,
+    Range128,
+    Float32,
+    Float64,
+    Str,
+    Ptr,
+    Ref,
+    Tuple,
+    Array,
+    Func,
+    Node,
+    Custom(&'a str),
+}
+
+impl<'a> TypeSymbolKind<'a> {
+    pub(crate) fn as_str(&self) -> &'a str {
+        match self {
+            TypeSymbolKind::Bool => "Bool",
+            TypeSymbolKind::UInt8 => "UInt8",
+            TypeSymbolKind::UInt16 => "UInt16",
+            TypeSymbolKind::UInt32 => "UInt32",
+            TypeSymbolKind::UInt64 => "UInt64",
+            TypeSymbolKind::UInt128 => "UInt128",
+            TypeSymbolKind::Int8 => "Int8",
+            TypeSymbolKind::Int16 => "Int16",
+            TypeSymbolKind::Int32 => "Int32",
+            TypeSymbolKind::Int64 => "Int64",
+            TypeSymbolKind::Int128 => "Int128",
+            TypeSymbolKind::URange8 => "URange8",
+            TypeSymbolKind::URange16 => "URange16",
+            TypeSymbolKind::URange32 => "URange32",
+            TypeSymbolKind::URange64 => "URange64",
+            TypeSymbolKind::URange128 => "URange128",
+            TypeSymbolKind::Range8 => "Range8",
+            TypeSymbolKind::Range16 => "Range16",
+            TypeSymbolKind::Range32 => "Range32",
+            TypeSymbolKind::Range64 => "Range64",
+            TypeSymbolKind::Range128 => "Range128",
+            TypeSymbolKind::Float32 => "Float32",
+            TypeSymbolKind::Float64 => "Float64",
+            TypeSymbolKind::Str => "Str",
+            TypeSymbolKind::Ptr => "Ptr",
+            TypeSymbolKind::Ref => "Ref",
+            TypeSymbolKind::Tuple => "Tuple",
+            TypeSymbolKind::Array => "Array",
+            TypeSymbolKind::Func => "Func",
+            TypeSymbolKind::Node => "Node",
+            TypeSymbolKind::Custom(id) => *id,
+        }
+    }
+
+    pub(crate) fn from_str(s: &'a str) -> Self {
+        match s {
+            "Bool" => TypeSymbolKind::Bool,
+            "UInt8" => TypeSymbolKind::UInt8,
+            "UInt16" => TypeSymbolKind::UInt16,
+            "UInt32" => TypeSymbolKind::UInt32,
+            "UInt64" => TypeSymbolKind::UInt64,
+            "UInt128" => TypeSymbolKind::UInt128,
+            "Int8" => TypeSymbolKind::Int8,
+            "Int16" => TypeSymbolKind::Int16,
+            "Int32" => TypeSymbolKind::Int32,
+            "Int64" => TypeSymbolKind::Int64,
+            "Int128" => TypeSymbolKind::Int128,
+            "URange8" => TypeSymbolKind::URange8,
+            "URange16" => TypeSymbolKind::URange16,
+            "URange32" => TypeSymbolKind::URange32,
+            "URange64" => TypeSymbolKind::URange64,
+            "URange128" => TypeSymbolKind::URange128,
+            "Range8" => TypeSymbolKind::Range8,
+            "Range16" => TypeSymbolKind::Range16,
+            "Range32" => TypeSymbolKind::Range32,
+            "Range64" => TypeSymbolKind::Range64,
+            "Range128" => TypeSymbolKind::Range128,
+            "Float32" => TypeSymbolKind::Float32,
+            "Float64" => TypeSymbolKind::Float64,
+            "Str" => TypeSymbolKind::Str,
+            "Ptr" => TypeSymbolKind::Ptr,
+            "Ref" => TypeSymbolKind::Ref,
+            "Tuple" => TypeSymbolKind::Tuple,
+            "Array" => TypeSymbolKind::Array,
+            "Func" => TypeSymbolKind::Func,
+            "Node" => TypeSymbolKind::Node,
+            id => TypeSymbolKind::Custom(id),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Container<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) module: &'a Path,
+    pub(crate) visibility: &'a Visibility,
+    pub(crate) type_symbols: Vec<&'a str>,
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Type<'a> {
@@ -51,14 +199,14 @@ pub(crate) enum Sign {
     Signed,
 }
 
-#[derive(Debug, PartialEq, Clone, PartialOrd)]
+#[derive(Debug, PartialEq, Clone, Copy, PartialOrd)]
 pub(crate) enum FloatSize {
     B32,
     B64,
 }
 
 impl<'a> Type<'a> {
-    pub(crate) fn registry_id(&self) -> Option<TypeSymbolKind> {
+    pub(crate) fn type_symbol_id(&self) -> Option<TypeSymbolKind> {
         match self {
             Type::Bool => Some(TypeSymbolKind::Bool),
             Type::Integer {

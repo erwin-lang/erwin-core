@@ -4,8 +4,8 @@ use crate::{
     error::{Error, loc_error},
     parser::Parser,
     structure::{
-        ast::{ExprKind, Statement, StatementKind, VarKind, Visibility},
-        token::TokenKind,
+        lexer::token::TokenKind,
+        parser::ast::{ExprKind, Statement, StatementKind, VarKind, Visibility},
     },
 };
 

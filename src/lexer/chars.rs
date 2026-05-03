@@ -1,7 +1,7 @@
 use crate::{
     error::{Error, loc_error},
     lexer::Lexer,
-    structure::token::{Token, TokenKind},
+    structure::lexer::token::{Token, TokenKind},
 };
 
 impl<'a> Lexer<'a> {

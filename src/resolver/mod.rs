@@ -3,7 +3,7 @@ use crate::{
     error::{Error, loc_error},
     lexer::Lexer,
     parser::Parser,
-    structure::ast::{Expr, ExprKind, Statement, StatementKind},
+    structure::parser::ast::{Expr, ExprKind, Statement, StatementKind},
 };
 
 use std::{
@@ -58,7 +58,7 @@ impl<'a> Resolver<'a> {
                 ..
             } = &mut stmt.kind
             {
-                let parts = self.flatten_path(path)?;
+                let parts = self.flatten_path(&path)?;
                 let mut next_path = match parts.first() {
                     Some(&"std") => self
                         .std_path

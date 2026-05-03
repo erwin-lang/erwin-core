@@ -4,10 +4,8 @@ use crate::{
     checker::Checker,
     error::Error,
     structure::{
-        ast::{Statement, StatementKind, Visibility},
-        symbol::ScopeSymbol,
-        type_expr::{TypeSymbol, TypeSymbolKind},
-        types::Type,
+        checker::module_table::{ScopeSymbol, Type},
+        parser::ast::{Expr, Statement, StatementKind, Visibility},
     },
 };
 
@@ -19,26 +17,19 @@ impl<'a> Checker<'a> {
                 resolved_path,
                 ..
             } => self.check_import(stmt, alias, resolved_path),
-            StatementKind::State { visibility, id, .. } => self.define_type(
+            StatementKind::VarDeclare {
+                visibility,
+                kind,
                 id,
-                TypeSymbol {
-                    visibility,
-                    kind: TypeSymbolKind::from_str(id),
-                    members: Vec::new(),
-                },
-                stmt.line,
-                stmt.col,
-            ),
-            StatementKind::Enum { visibility, id, .. } => self.define_type(
+                ty,
+                ..
+            } => self.check_var_declare(stmt, visibility, id, ty),
+            StatementKind::Node {
+                visibility,
                 id,
-                TypeSymbol {
-                    visibility,
-                    kind: TypeSymbolKind::from_str(id),
-                    members: Vec::new(),
-                },
-                stmt.line,
-                stmt.col,
-            ),
+                ty,
+                value,
+            } => {}
             _ => Ok(()),
         }
     }
@@ -52,11 +43,38 @@ impl<'a> Checker<'a> {
         self.check_module(resolved_path, stmt.line, stmt.col)?;
         let id = alias.unwrap_or(resolved_path.file_stem().unwrap().to_str().unwrap());
 
-        self.define_symbol(
+        self.define_scope_symbol(
             id,
             ScopeSymbol {
+                id,
                 visibility: &Visibility::Priv,
                 ty: Type::Module(resolved_path),
+                is_static_member: true,
+            },
+            stmt.line,
+            stmt.col,
+        )
+    }
+
+    fn check_var_declare(
+        &mut self,
+        stmt: &Statement<'a>,
+        visibility: &'a Visibility,
+        id: &'a str,
+        ty: &Option<Expr<'a>>,
+    ) -> Result<(), Error> {
+        let final_ty = match ty {
+            Some(e) => self.check_type(e)?,
+            None => Type::Unknown,
+        };
+
+        self.define_scope_symbol(
+            id,
+            ScopeSymbol {
+                id,
+                visibility,
+                ty: final_ty,
+                is_static_member: self.scoped_symbols.get(self.current_module).unwrap().len() == 1,
             },
             stmt.line,
             stmt.col,
