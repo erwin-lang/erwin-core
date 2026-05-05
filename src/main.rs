@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env::args, path::Path};
+use std::{env::args, path::Path};
 
 use crate::{arena::Arena, checker::Checker, error::Error, resolver::Resolver};
 
@@ -21,7 +21,7 @@ fn main() -> Result<(), Error> {
     let main_module = Path::new(&args[1]).canonicalize()?;
     let arena = Box::leak(Box::new(Arena::new()));
 
-    let registry = Resolver::new(&std_path, &main_module).resolve()?;
+    let registry = Resolver::new(&arena, &std_path, &main_module).resolve()?;
 
     let mut checker = Checker::new(&arena, &std_path, &prelude_module, &main_module, &registry);
     let (instructions, literals) = checker.check()?;
